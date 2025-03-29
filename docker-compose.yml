@@ -1,0 +1,40 @@
+services:
+  kudoboard-api:
+    image: kudoboard-api:1.0
+    container_name: kudoboard-api
+    restart: always
+    environment:
+      APP_ENV: 'development'
+      PORT: '8080'
+      CLIENT_URL: '*'
+      DATABASE_URL: 'postgresql://admin:secret@postgres:5432/kudoboard?sslmode=disable'
+      JWT_SECRET: 'your-super-secret-key-change-this-in-production'
+    ports:
+      - '8081:8080'
+    depends_on:
+      - postgres
+    networks:
+      - hung
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: kudoboard
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - hung
+
+networks:
+  hung:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local

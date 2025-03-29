@@ -5,10 +5,8 @@ import "gorm.io/gorm"
 // Theme represents a predefined board theme
 type Theme struct {
 	gorm.Model
+	Category           string `gorm:"not null"`
 	Name               string `gorm:"not null"`
-	Description        string
-	BackgroundColor    string `gorm:"default:'#ffffff'"`
-	BackgroundImageURL string
-	AdditionalStyles   string `gorm:"type:json"` // JSON string with additional style settings
-	IsDefault          bool   `gorm:"default:false"`
+	IconUrl            string `gorm:"not null"`
+	BackgroundImageURL string `gorm:"not null"`
 }

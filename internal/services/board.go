@@ -7,6 +7,7 @@ import (
 	"kudoboard-api/internal/models"
 	"kudoboard-api/internal/services/storage"
 	"kudoboard-api/internal/utils"
+	"log"
 )
 
 // BoardService handles board-related business logic
@@ -29,21 +30,43 @@ func NewBoardService(db *gorm.DB, storage storage.StorageService, cfg *config.Co
 func (s *BoardService) CreateBoard(userID uint, input requests.CreateBoardRequest) (*models.Board, error) {
 	// Create new board
 	board := models.Board{
-		Title:              input.Title,
-		Description:        input.Description,
-		CreatorID:          userID,
-		BackgroundType:     input.BackgroundType,
-		BackgroundImageURL: input.BackgroundImageURL,
-		BackgroundColor:    input.BackgroundColor,
-		ThemeID:            input.ThemeID,
-		IsPrivate:          input.IsPrivate,
-		AllowAnonymous:     input.AllowAnonymous,
-		ExpiresAt:          input.ExpiresAt,
+		Title:                input.Title,
+		ReceiverName:         input.ReceiverName,
+		CreatorID:            userID,
+		FontName:             input.FontName,
+		FontSize:             input.FontSize,
+		HeaderColor:          input.HeaderColor,
+		ThemeID:              input.ThemeID,
+		Effect:               input.Effect,
+		EnableIntroAnimation: input.EnableIntroAnimation,
+		IsPrivate:            input.IsPrivate,
+		AllowAnonymous:       input.AllowAnonymous,
 	}
 
+	// Use a transaction to ensure both operations succeed or fail together
+	tx := s.db.Begin()
+
 	// Save board to database
-	if result := s.db.Create(&board); result.Error != nil {
+	if result := tx.Create(&board); result.Error != nil {
+		tx.Rollback()
 		return nil, utils.NewInternalError("Failed to create board", result.Error)
+	}
+
+	// Add creator as admin contributor
+	contributor := models.BoardContributor{
+		BoardID: board.ID,
+		UserID:  userID,
+		Role:    models.RoleAdmin,
+	}
+
+	if result := tx.Create(&contributor); result.Error != nil {
+		tx.Rollback()
+		return nil, utils.NewInternalError("Failed to add creator as admin", result.Error)
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		return nil, utils.NewInternalError("Failed to create board", err)
 	}
 
 	return &board, nil
@@ -75,7 +98,7 @@ func (s *BoardService) GetBoardBySlug(slug string) (*models.Board, *models.User,
 
 	// Get posts
 	var posts []models.Post
-	if result := s.db.Where("board_id = ?", board.ID).Order("position_order asc, created_at desc").Find(&posts); result.Error != nil {
+	if result := s.db.Where("board_id = ?", board.ID).Order("created_at desc").Find(&posts); result.Error != nil {
 		return nil, nil, nil, utils.NewInternalError("Failed to fetch posts", result.Error)
 	}
 
@@ -90,6 +113,11 @@ func (s *BoardService) UpdateBoard(boardID, userID uint, input requests.UpdateBo
 		return nil, utils.NewNotFoundError("Board not found")
 	}
 
+	// Check if board is locked
+	if board.IsLocked {
+		return nil, utils.NewForbiddenError("This board is locked and doesn't allow update")
+	}
+
 	// Check if user is the creator
 	if board.CreatorID != userID {
 		return nil, utils.NewForbiddenError("You don't have permission to update this board")
@@ -99,29 +127,35 @@ func (s *BoardService) UpdateBoard(boardID, userID uint, input requests.UpdateBo
 	if input.Title != nil {
 		board.Title = *input.Title
 	}
-	if input.Description != nil {
-		board.Description = *input.Description
+	if input.ReceiverName != nil {
+		board.ReceiverName = *input.ReceiverName
 	}
-	if input.BackgroundType != nil {
-		board.BackgroundType = *input.BackgroundType
+	if input.FontName != nil {
+		board.FontName = *input.FontName
 	}
-	if input.BackgroundImageURL != nil {
-		board.BackgroundImageURL = *input.BackgroundImageURL
+	if input.FontSize != nil {
+		board.FontSize = *input.FontSize
 	}
-	if input.BackgroundColor != nil {
-		board.BackgroundColor = *input.BackgroundColor
+	if input.HeaderColor != nil {
+		board.HeaderColor = *input.HeaderColor
+	}
+	if input.ShowHeaderColor != nil {
+		board.ShowHeaderColor = *input.ShowHeaderColor
 	}
 	if input.ThemeID != nil {
 		board.ThemeID = input.ThemeID
+	}
+	if input.Effect != nil {
+		board.Effect = *input.Effect
+	}
+	if input.EnableIntroAnimation != nil {
+		board.EnableIntroAnimation = *input.EnableIntroAnimation
 	}
 	if input.IsPrivate != nil {
 		board.IsPrivate = *input.IsPrivate
 	}
 	if input.AllowAnonymous != nil {
 		board.AllowAnonymous = *input.AllowAnonymous
-	}
-	if input.ExpiresAt != nil {
-		board.ExpiresAt = input.ExpiresAt
 	}
 
 	// Save changes
@@ -154,25 +188,18 @@ func (s *BoardService) DeleteBoard(boardID, userID uint) error {
 		return utils.NewInternalError("Failed to delete board", err)
 	}
 
-	// Get all media for posts on this board
-	var media []models.Media
-	if err := tx.Where("post_id IN (SELECT id FROM posts WHERE board_id = ?)", boardID).Find(&media).Error; err != nil {
+	// Get all media for posts on this board and delete
+	var post []models.Post
+	if err := tx.Where("board_id = ?", boardID).Find(&post).Error; err != nil {
 		tx.Rollback()
 		return utils.NewInternalError("Failed to delete board", err)
 	}
 
-	// Delete media files from storage
-	for _, m := range media {
-		if m.SourceType == models.SourceTypeUpload {
-			if err := s.storage.Delete(m.SourceURL); err != nil {
-				// Log error but continue (we don't want to fail the entire transaction for a storage error)
+	for _, p := range post {
+		if p.MediaPath != "" && p.MediaSource == "internal" {
+			if err := s.storage.Delete(p.MediaPath); err != nil {
+				log.Println("can not delete media from storage", err)
 			}
-		}
-
-		// Delete media record
-		if err := tx.Delete(&m).Error; err != nil {
-			tx.Rollback()
-			return utils.NewInternalError("Failed to delete board", err)
 		}
 	}
 
@@ -202,51 +229,61 @@ func (s *BoardService) DeleteBoard(boardID, userID uint) error {
 	return nil
 }
 
-// ListUserBoards lists all boards created by a user
-func (s *BoardService) ListUserBoards(userID uint, page, perPage int, search, sortBy, order string) ([]models.Board, int64, error) {
-	// Build query
-	query := s.db.Model(&models.Board{}).Where("creator_id = ?", userID)
-
-	// Add search if provided
-	if search != "" {
-		query = query.Where("title LIKE ? OR description LIKE ?", "%"+search+"%", "%"+search+"%")
+// ToggleBoardLock changes the locked status of a board
+func (s *BoardService) ToggleBoardLock(boardID, userID uint, isLocked bool) (*models.Board, error) {
+	// Find board
+	var board models.Board
+	if result := s.db.First(&board, boardID); result.Error != nil {
+		return nil, utils.NewNotFoundError("Board not found")
 	}
 
-	// Count total boards
-	var total int64
-	query.Count(&total)
-
-	// Add pagination
-	offset := (page - 1) * perPage
-	query = query.Offset(offset).Limit(perPage)
-
-	// Add ordering
-	if sortBy == "" {
-		sortBy = "created_at"
-	}
-	if order == "" {
-		order = "desc"
-	}
-	orderClause := sortBy + " " + order
-	query = query.Order(orderClause)
-
-	// Execute query
-	var boards []models.Board
-	if result := query.Find(&boards); result.Error != nil {
-		return nil, 0, utils.NewInternalError("Failed to fetch boards", result.Error)
+	// Check if user is the creator or admin
+	if board.CreatorID != userID {
+		// Check if user is a board admin
+		var contributor models.BoardContributor
+		result := s.db.Where("board_id = ? AND user_id = ? AND role = ?",
+			boardID, userID, models.RoleAdmin).First(&contributor)
+		if result.Error != nil {
+			return nil, utils.NewForbiddenError("You don't have permission to lock/unlock this board")
+		}
 	}
 
-	return boards, total, nil
+	// Update locked status
+	board.IsLocked = isLocked
+
+	// Save changes
+	if result := s.db.Save(&board); result.Error != nil {
+		return nil, utils.NewInternalError("Failed to update board lock status", result.Error)
+	}
+
+	return &board, nil
 }
 
-// ListPublicBoards lists all public boards
-func (s *BoardService) ListPublicBoards(page, perPage int, search, sortBy, order string) ([]models.Board, int64, error) {
-	// Build query for public boards
-	query := s.db.Model(&models.Board{}).Where("is_private = ?", false)
+// ListUserBoards lists all boards where the user is owner or contributor
+func (s *BoardService) ListUserBoards(userID uint, page, perPage int, search, sortBy, order string) ([]struct {
+	models.Board
+	IsOwner    bool
+	IsFavorite bool
+	IsArchived bool
+	Creator    models.User
+}, int64, error) {
+	// Create a subquery to get all board IDs where user is a contributor
+	var contributorBoardIDs []uint
+	if err := s.db.Model(&models.BoardContributor{}).
+		Select("board_id").
+		Where("user_id = ?", userID).
+		Find(&contributorBoardIDs).Error; err != nil {
+		return nil, 0, utils.NewInternalError("Failed to fetch contributor boards", err)
+	}
+
+	// Build main query to get all boards where user is creator OR contributor
+	query := s.db.Model(&models.Board{}).
+		Distinct().
+		Where("creator_id = ? OR id IN ?", userID, contributorBoardIDs)
 
 	// Add search if provided
 	if search != "" {
-		query = query.Where("title LIKE ? OR description LIKE ?", "%"+search+"%", "%"+search+"%")
+		query = query.Where("title LIKE ? OR receiver_name LIKE ?", "%"+search+"%", "%"+search+"%")
 	}
 
 	// Count total boards
@@ -267,13 +304,94 @@ func (s *BoardService) ListPublicBoards(page, perPage int, search, sortBy, order
 	orderClause := sortBy + " " + order
 	query = query.Order(orderClause)
 
-	// Execute query
+	// Execute query for boards
 	var boards []models.Board
 	if result := query.Find(&boards); result.Error != nil {
 		return nil, 0, utils.NewInternalError("Failed to fetch boards", result.Error)
 	}
 
-	return boards, total, nil
+	// Get contributor info for these boards
+	var contributors []models.BoardContributor
+	if err := s.db.Where("user_id = ? AND board_id IN ?", userID,
+		func() []uint {
+			ids := make([]uint, len(boards))
+			for i, b := range boards {
+				ids[i] = b.ID
+			}
+			return ids
+		}()).
+		Find(&contributors).Error; err != nil {
+		return nil, 0, utils.NewInternalError("Failed to fetch board contributors", err)
+	}
+
+	// Create a map for quick lookup of contributor info
+	contributorMap := make(map[uint]models.BoardContributor)
+	for _, c := range contributors {
+		contributorMap[c.BoardID] = c
+	}
+
+	// Build response with additional fields
+	result := make([]struct {
+		models.Board
+		IsOwner    bool
+		IsFavorite bool
+		IsArchived bool
+		Creator    models.User
+	}, len(boards))
+
+	for i, board := range boards {
+		var creator models.User
+		if err := s.db.First(&creator, board.CreatorID).Error; err != nil {
+			continue
+		}
+		result[i].Board = board
+		result[i].IsOwner = board.CreatorID == userID
+
+		// Set favorite/archived status from contributor record if it exists
+		if contributor, exists := contributorMap[board.ID]; exists {
+			result[i].IsFavorite = contributor.IsFavorite
+			result[i].IsArchived = contributor.IsArchived
+		} else {
+			// For boards where user is creator but not in contributors table yet
+			result[i].IsFavorite = false
+			result[i].IsArchived = false
+		}
+		result[i].Creator = creator
+	}
+
+	return result, total, nil
+}
+
+// UpdateBoardPreferences updates a user's preferences for a board (favorite/archived status)
+func (s *BoardService) UpdateBoardPreferences(boardID, userID uint, isFavorite, isArchived *bool) error {
+	// Find the contributor record
+	var contributor models.BoardContributor
+	result := s.db.Where("board_id = ? AND user_id = ?", boardID, userID).First(&contributor)
+	if result.Error != nil {
+		// If the board-user relationship doesn't exist
+		return utils.NewNotFoundError("Board not found or you don't have access to it")
+	}
+
+	// Update only the fields that are provided
+	updates := make(map[string]interface{})
+
+	if isFavorite != nil {
+		updates["is_favorite"] = *isFavorite
+	}
+
+	if isArchived != nil {
+		updates["is_archived"] = *isArchived
+	}
+
+	// Only update if there are changes
+	if len(updates) > 0 {
+		result = s.db.Model(&contributor).Updates(updates)
+		if result.Error != nil {
+			return utils.NewInternalError("Failed to update board preferences", result.Error)
+		}
+	}
+
+	return nil
 }
 
 // AddContributor adds a contributor to a board
@@ -416,24 +534,6 @@ func (s *BoardService) ListBoardContributors(boardID, userID uint) ([]models.Boa
 	}
 
 	return contributors, users, nil
-}
-
-// GetThemes gets all available themes
-func (s *BoardService) GetThemes() ([]models.Theme, error) {
-	var themes []models.Theme
-	if result := s.db.Find(&themes); result.Error != nil {
-		return nil, utils.NewInternalError("Failed to fetch themes", result.Error)
-	}
-	return themes, nil
-}
-
-// GetThemeByID gets a theme by ID
-func (s *BoardService) GetThemeByID(themeID uint) (*models.Theme, error) {
-	var theme models.Theme
-	if result := s.db.First(&theme, themeID); result.Error != nil {
-		return nil, utils.NewNotFoundError("Theme not found")
-	}
-	return &theme, nil
 }
 
 // CanAccessBoard checks if a user has access to a board

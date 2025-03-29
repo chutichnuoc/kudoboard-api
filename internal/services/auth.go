@@ -1,10 +1,13 @@
 package services
 
 import (
+	"encoding/json"
+	"fmt"
 	"gorm.io/gorm"
 	"kudoboard-api/internal/config"
 	"kudoboard-api/internal/models"
 	"kudoboard-api/internal/utils"
+	"net/http"
 )
 
 // AuthService handles authentication logic
@@ -74,47 +77,80 @@ func (s *AuthService) LoginUser(email, password string) (*models.User, string, e
 
 // GoogleLogin handles Google OAuth login
 func (s *AuthService) GoogleLogin(accessToken string) (*models.User, string, error) {
-	// In a real implementation, you would:
-	// 1. Verify the Google token by calling Google's API
-	// 2. Get user info from Google
-	// 3. Create or update the user in your database
-	// 4. Generate a JWT token
+	// Create HTTP client
+	client := &http.Client{}
 
-	// For this example, we'll mock it
-	// This should be replaced with actual Google API calls
-	googleID := "google_123456789"
-	email := "example@gmail.com"
-	name := "Google User"
+	// Verify the token by calling Google's API
+	resp, err := client.Get("https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=" + accessToken)
+	if err != nil {
+		return nil, "", utils.NewInternalError("Failed to verify Google token", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", utils.NewUnauthorizedError("Invalid Google token")
+	}
+
+	// Parse the response
+	var tokenInfo struct {
+		Sub           string `json:"sub"`
+		Email         string `json:"email"`
+		EmailVerified string `json:"email_verified"`
+		Name          string `json:"name"`
+		Picture       string `json:"picture"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&tokenInfo); err != nil {
+		return nil, "", utils.NewInternalError("Failed to parse Google token info", err)
+	}
+
+	// Validate email verification
+	if tokenInfo.EmailVerified != "true" {
+		return nil, "", utils.NewUnauthorizedError("Email not verified with Google")
+	}
 
 	// Find user by Google ID or email
 	var user models.User
-	result := s.db.Where("google_id = ?", googleID).Or("email = ?", email).First(&user)
+	result := s.db.Where("google_id = ?", tokenInfo.Sub).Or("email = ?", tokenInfo.Email).First(&user)
 
 	if result.Error != nil {
 		// User doesn't exist, create new user
 		user = models.User{
-			Name:         name,
-			Email:        email,
-			GoogleID:     &googleID,
-			AuthProvider: "google",
-			IsVerified:   true,
+			Name:           tokenInfo.Name,
+			Email:          tokenInfo.Email,
+			Password:       "", // No password for OAuth users
+			GoogleID:       &tokenInfo.Sub,
+			ProfilePicture: tokenInfo.Picture,
+			AuthProvider:   "google",
+			IsVerified:     true,
 		}
 
 		if result := s.db.Create(&user); result.Error != nil {
 			return nil, "", utils.NewInternalError("Failed to create user", result.Error)
 		}
 	} else {
-		// User exists, update Google ID if needed
-		if user.GoogleID == nil {
-			user.GoogleID = &googleID
+		// User exists, update Google ID and profile if needed
+		updates := false
+
+		if user.GoogleID == nil || *user.GoogleID != tokenInfo.Sub {
+			user.GoogleID = &tokenInfo.Sub
 			user.AuthProvider = "google"
+			updates = true
+		}
+
+		if tokenInfo.Picture != "" && user.ProfilePicture != tokenInfo.Picture {
+			user.ProfilePicture = tokenInfo.Picture
+			updates = true
+		}
+
+		if updates {
 			if result := s.db.Save(&user); result.Error != nil {
 				return nil, "", utils.NewInternalError("Failed to update user", result.Error)
 			}
 		}
 	}
 
-	// Generate token
+	// Generate JWT token
 	token, err := utils.GenerateToken(user.ID, s.cfg.JWTSecret, s.cfg.JWTExpiresIn)
 	if err != nil {
 		return nil, "", utils.NewInternalError("Failed to generate token", err)
@@ -125,46 +161,88 @@ func (s *AuthService) GoogleLogin(accessToken string) (*models.User, string, err
 
 // FacebookLogin handles Facebook OAuth login
 func (s *AuthService) FacebookLogin(accessToken string) (*models.User, string, error) {
-	// Similar to GoogleLogin, in a real implementation you would:
-	// 1. Verify the Facebook token
-	// 2. Get user info from Facebook
-	// 3. Create or update the user in your database
-	// 4. Generate a JWT token
+	// Create HTTP client
+	client := &http.Client{}
 
-	// Mock implementation
-	facebookID := "facebook_123456789"
-	email := "example@facebook.com"
-	name := "Facebook User"
+	// Verify the token by calling Facebook's API to get user info
+	// We need to include fields=id,name,email to get these fields
+	fbURL := fmt.Sprintf("https://graph.facebook.com/me?fields=id,name,email,picture&access_token=%s", accessToken)
+	resp, err := client.Get(fbURL)
+	if err != nil {
+		return nil, "", utils.NewInternalError("Failed to verify Facebook token", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", utils.NewUnauthorizedError("Invalid Facebook token")
+	}
+
+	// Parse the response
+	var fbUserInfo struct {
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+		Email   string `json:"email"`
+		Picture struct {
+			Data struct {
+				URL string `json:"url"`
+			} `json:"data"`
+		} `json:"picture"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&fbUserInfo); err != nil {
+		return nil, "", utils.NewInternalError("Failed to parse Facebook user info", err)
+	}
+
+	// Ensure we got an email (Facebook might not return it if user hasn't verified it)
+	if fbUserInfo.Email == "" {
+		return nil, "", utils.NewUnauthorizedError("Email not provided by Facebook. Please ensure your email is verified with Facebook")
+	}
 
 	// Find user by Facebook ID or email
 	var user models.User
-	result := s.db.Where("facebook_id = ?", facebookID).Or("email = ?", email).First(&user)
+	result := s.db.Where("facebook_id = ?", fbUserInfo.ID).Or("email = ?", fbUserInfo.Email).First(&user)
 
 	if result.Error != nil {
 		// User doesn't exist, create new user
+		facebookID := fbUserInfo.ID // Create a variable to store the ID
 		user = models.User{
-			Name:         name,
-			Email:        email,
-			FacebookID:   &facebookID,
-			AuthProvider: "facebook",
-			IsVerified:   true,
+			Name:           fbUserInfo.Name,
+			Email:          fbUserInfo.Email,
+			Password:       "", // No password for OAuth users
+			FacebookID:     &facebookID,
+			ProfilePicture: fbUserInfo.Picture.Data.URL,
+			AuthProvider:   "facebook",
+			IsVerified:     true,
 		}
 
 		if result := s.db.Create(&user); result.Error != nil {
 			return nil, "", utils.NewInternalError("Failed to create user", result.Error)
 		}
 	} else {
-		// User exists, update Facebook ID if needed
-		if user.FacebookID == nil {
+		// User exists, update Facebook ID and profile if needed
+		updates := false
+
+		if user.FacebookID == nil || *user.FacebookID != fbUserInfo.ID {
+			facebookID := fbUserInfo.ID
 			user.FacebookID = &facebookID
 			user.AuthProvider = "facebook"
+			updates = true
+		}
+
+		pictureURL := fbUserInfo.Picture.Data.URL
+		if pictureURL != "" && user.ProfilePicture != pictureURL {
+			user.ProfilePicture = pictureURL
+			updates = true
+		}
+
+		if updates {
 			if result := s.db.Save(&user); result.Error != nil {
 				return nil, "", utils.NewInternalError("Failed to update user", result.Error)
 			}
 		}
 	}
 
-	// Generate token
+	// Generate JWT token
 	token, err := utils.GenerateToken(user.ID, s.cfg.JWTSecret, s.cfg.JWTExpiresIn)
 	if err != nil {
 		return nil, "", utils.NewInternalError("Failed to generate token", err)

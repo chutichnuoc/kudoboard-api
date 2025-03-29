@@ -6,20 +6,18 @@ import (
 	"io"
 	"kudoboard-api/internal/config"
 	"mime/multipart"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
 )
 
-// StorageType represents the type of storage service
-type StorageType string
-
 const (
 	// StorageTypeLocal represents local file storage
-	StorageTypeLocal StorageType = "local"
+	StorageTypeLocal string = "local"
 
 	// StorageTypeS3 represents AWS S3 storage
-	StorageTypeS3 StorageType = "s3"
+	StorageTypeS3 string = "s3"
 )
 
 // FileInfo represents metadata about a stored file
@@ -39,10 +37,10 @@ type StorageService interface {
 	SaveFromReader(reader io.Reader, filename, contentType, directory string) (*FileInfo, error)
 
 	// Get returns a reader for a stored file
-	Get(filename string) (io.ReadCloser, error)
+	Get(fileURL string) (io.ReadCloser, error)
 
 	// Delete removes a stored file
-	Delete(filename string) error
+	Delete(fileURL string) error
 
 	// GetURL returns the URL for a stored file
 	GetURL(filename string) string
@@ -50,7 +48,7 @@ type StorageService interface {
 
 // NewStorageService creates a new storage service based on configuration
 func NewStorageService(cfg *config.Config) (StorageService, error) {
-	switch StorageType(cfg.StorageType) {
+	switch cfg.StorageType {
 	case StorageTypeLocal:
 		return NewLocalStorage(cfg.LocalBasePath), nil
 	case StorageTypeS3:
@@ -69,4 +67,25 @@ func generateUniqueFilename(originalFilename string) string {
 	uniqueID := uuid.New().String()[0:8]
 
 	return fmt.Sprintf("%s-%s-%s%s", name, timestamp, uniqueID, ext)
+}
+
+// Helper function to extract file path from URL
+func extractPathFromURL(fileURL string) (string, error) {
+	// If it looks like a URL, parse it
+	if strings.HasPrefix(fileURL, "http://") || strings.HasPrefix(fileURL, "https://") {
+		parsedURL, err := url.Parse(fileURL)
+		if err != nil {
+			return "", fmt.Errorf("invalid URL format: %w", err)
+		}
+		// Return the path portion of the URL
+		return strings.TrimPrefix(parsedURL.Path, "/"), nil
+	}
+
+	// If it's a local path starting with /uploads/
+	if strings.HasPrefix(fileURL, "/uploads/") {
+		return strings.TrimPrefix(fileURL, "/uploads/"), nil
+	}
+
+	// If it's already a relative path, just return it
+	return fileURL, nil
 }

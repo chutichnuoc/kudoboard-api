@@ -65,23 +65,24 @@ func (s *S3Storage) Save(file *multipart.FileHeader, directory string) (*FileInf
 	key = strings.ReplaceAll(key, "\\", "/") // S3 uses forward slashes
 
 	// Upload file to S3
-	result, err := s.uploader.Upload(&s3manager.UploadInput{
+	contentType := file.Header.Get("Content-Type")
+	_, err = s.uploader.Upload(&s3manager.UploadInput{
 		Bucket:      aws.String(s.bucket),
 		Key:         aws.String(key),
 		Body:        src,
-		ContentType: aws.String(file.Header.Get("Content-Type")),
+		ContentType: aws.String(contentType),
 	})
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload file to S3: %w", err)
 	}
 
-	// Return file info
+	// Return file info using our own GetURL method to ensure consistent URL format
 	return &FileInfo{
 		Filename:    filename,
 		Size:        file.Size,
-		ContentType: file.Header.Get("Content-Type"),
-		URL:         result.Location,
+		ContentType: contentType,
+		URL:         s.GetURL(key),
 	}, nil
 }
 
@@ -95,7 +96,7 @@ func (s *S3Storage) SaveFromReader(reader io.Reader, filename, contentType, dire
 	key = strings.ReplaceAll(key, "\\", "/") // S3 uses forward slashes
 
 	// Upload file to S3
-	result, err := s.uploader.Upload(&s3manager.UploadInput{
+	_, err := s.uploader.Upload(&s3manager.UploadInput{
 		Bucket:      aws.String(s.bucket),
 		Key:         aws.String(key),
 		Body:        reader,
@@ -106,20 +107,33 @@ func (s *S3Storage) SaveFromReader(reader io.Reader, filename, contentType, dire
 		return nil, fmt.Errorf("failed to upload file to S3: %w", err)
 	}
 
-	// Since we can't get the size directly from the reader,
-	// we'll need to set it to 0 or fetch the object metadata later
+	// Get the size by performing a head request
+	headOutput, err := s.s3Client.HeadObject(&s3.HeadObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+
+	var size int64
+	if err == nil && headOutput.ContentLength != nil {
+		size = *headOutput.ContentLength
+	}
+
+	// Return file info
 	return &FileInfo{
 		Filename:    uniqueFilename,
-		Size:        0, // Size unknown when uploaded from reader
+		Size:        size,
 		ContentType: contentType,
-		URL:         result.Location,
+		URL:         s.GetURL(key),
 	}, nil
 }
 
 // Get retrieves a file from S3
-func (s *S3Storage) Get(filename string) (io.ReadCloser, error) {
-	// Create a temporary buffer to store the file
-	key := strings.ReplaceAll(filename, "\\", "/") // S3 uses forward slashes
+func (s *S3Storage) Get(fileURL string) (io.ReadCloser, error) {
+	// Extract key from URL
+	key, err := extractPathFromURL(fileURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse file URL: %w", err)
+	}
 
 	// Get object from S3
 	result, err := s.s3Client.GetObject(&s3.GetObjectInput{
@@ -135,11 +149,24 @@ func (s *S3Storage) Get(filename string) (io.ReadCloser, error) {
 }
 
 // Delete removes a file from S3
-func (s *S3Storage) Delete(filename string) error {
-	key := strings.ReplaceAll(filename, "\\", "/") // S3 uses forward slashes
+func (s *S3Storage) Delete(fileURL string) error {
+	// Extract key from URL
+	key, err := extractPathFromURL(fileURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse file URL: %w", err)
+	}
+
+	// Check if object exists
+	_, err = s.s3Client.HeadObject(&s3.HeadObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return fmt.Errorf("file not found: %s", key)
+	}
 
 	// Delete object from S3
-	_, err := s.s3Client.DeleteObject(&s3.DeleteObjectInput{
+	_, err = s.s3Client.DeleteObject(&s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
 	})
@@ -162,7 +189,6 @@ func (s *S3Storage) Delete(filename string) error {
 }
 
 // GetURL returns the URL for a stored file
-func (s *S3Storage) GetURL(filename string) string {
-	key := strings.ReplaceAll(filename, "\\", "/") // S3 uses forward slashes
+func (s *S3Storage) GetURL(key string) string {
 	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", s.bucket, s.region, key)
 }

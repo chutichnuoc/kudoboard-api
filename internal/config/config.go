@@ -17,12 +17,8 @@ type Config struct {
 	DatabaseURL string
 
 	// Authentication
-	JWTSecret          string
-	JWTExpiresIn       time.Duration
-	GoogleClientID     string
-	GoogleClientSecret string
-	FacebookAppID      string
-	FacebookAppSecret  string
+	JWTSecret    string
+	JWTExpiresIn time.Duration
 
 	// Storage
 	StorageType   string // "local" or "s3"
@@ -51,12 +47,8 @@ func Load() *Config {
 		DatabaseURL: getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/kudoboard?sslmode=disable"),
 
 		// Authentication
-		JWTSecret:          getEnv("JWT_SECRET", "your-super-secret-key-change-this-in-production"),
-		JWTExpiresIn:       time.Duration(jwtExpiration) * time.Hour,
-		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
-		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
-		FacebookAppID:      getEnv("FACEBOOK_APP_ID", ""),
-		FacebookAppSecret:  getEnv("FACEBOOK_APP_SECRET", ""),
+		JWTSecret:    getEnv("JWT_SECRET", "your-super-secret-key-change-this-in-production"),
+		JWTExpiresIn: time.Duration(jwtExpiration) * time.Hour,
 
 		// Storage
 		StorageType:   getEnv("STORAGE_TYPE", "local"),

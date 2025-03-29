@@ -13,6 +13,7 @@ type User struct {
 	Password       string `gorm:"not null"`
 	ProfilePicture string
 	IsVerified     bool    `gorm:"default:false"`
+	IsAdmin        bool    `gorm:"default:false"`
 	GoogleID       *string `gorm:"uniqueIndex;default:null"`
 	FacebookID     *string `gorm:"uniqueIndex;default:null"`
 	AuthProvider   string  `gorm:"default:'local'"`

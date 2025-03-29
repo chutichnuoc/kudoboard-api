@@ -12,6 +12,7 @@ type APIResponse struct {
 type APIError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	Details string `json:"details,omitempty"`
 }
 
 // Pagination represents pagination information in the API response

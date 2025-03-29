@@ -21,12 +21,9 @@ type AppError struct {
 	Err     error
 }
 
-// Error implements the error interface
+// Error implements the error interface, return on
 func (e *AppError) Error() string {
-	if e.Err != nil {
-		return fmt.Sprintf("%s: %s (%s)", e.Code, e.Message, e.Err.Error())
-	}
-	return fmt.Sprintf("%s: %s", e.Code, e.Message)
+	return fmt.Sprintf("%s", e.Message)
 }
 
 // Unwrap returns the wrapped error

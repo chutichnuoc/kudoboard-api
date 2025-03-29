@@ -16,7 +16,6 @@ type LoginRequest struct {
 // SocialLoginRequest represents a login request with a social provider
 type SocialLoginRequest struct {
 	AccessToken string `json:"access_token" binding:"required"`
-	Provider    string `json:"provider" binding:"required,oneof=google facebook"`
 }
 
 // UpdateProfileRequest represents a request to update user profile

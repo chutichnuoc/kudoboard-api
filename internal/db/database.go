@@ -57,7 +57,6 @@ func MigrateSchema(db *gorm.DB) error {
 		&models.Board{},
 		&models.BoardContributor{},
 		&models.Post{},
-		&models.Media{},
 		&models.PostLike{},
 	)
 
@@ -65,68 +64,8 @@ func MigrateSchema(db *gorm.DB) error {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
-	// Create default themes if they don't exist
-	createDefaultThemes(db)
-
 	log.Println("Database migrations completed")
 	return nil
-}
-
-// Create default themes
-func createDefaultThemes(db *gorm.DB) {
-	var count int64
-	db.Model(&models.Theme{}).Count(&count)
-
-	// Only create default themes if none exist
-	if count == 0 {
-		themes := []models.Theme{
-			{
-				Name:               "Default Light",
-				Description:        "Clean light theme with subtle background",
-				BackgroundColor:    "#ffffff",
-				BackgroundImageURL: "",
-				AdditionalStyles:   `{"cardBgColor": "#f8f9fa", "textColor": "#212529"}`,
-				IsDefault:          true,
-			},
-			{
-				Name:               "Default Dark",
-				Description:        "Modern dark theme",
-				BackgroundColor:    "#212529",
-				BackgroundImageURL: "",
-				AdditionalStyles:   `{"cardBgColor": "#343a40", "textColor": "#f8f9fa"}`,
-				IsDefault:          false,
-			},
-			{
-				Name:               "Celebration",
-				Description:        "Festive theme with confetti background",
-				BackgroundColor:    "#f8f9fa",
-				BackgroundImageURL: "/themes/celebration-bg.jpg",
-				AdditionalStyles:   `{"cardBgColor": "#ffffff", "textColor": "#212529"}`,
-				IsDefault:          false,
-			},
-			{
-				Name:               "Gratitude",
-				Description:        "Warm theme perfect for thank you messages",
-				BackgroundColor:    "#fff8e1",
-				BackgroundImageURL: "",
-				AdditionalStyles:   `{"cardBgColor": "#fffde7", "textColor": "#5d4037"}`,
-				IsDefault:          false,
-			},
-			{
-				Name:               "Professional",
-				Description:        "Clean and formal theme for workplace kudos",
-				BackgroundColor:    "#eceff1",
-				BackgroundImageURL: "",
-				AdditionalStyles:   `{"cardBgColor": "#ffffff", "textColor": "#263238"}`,
-				IsDefault:          false,
-			},
-		}
-
-		for _, theme := range themes {
-			db.Create(&theme)
-		}
-		log.Println("Created default themes")
-	}
 }
 
 // getLogLevel returns the appropriate GORM log level based on environment

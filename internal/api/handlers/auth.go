@@ -153,13 +153,6 @@ func (h *AuthHandler) FacebookLogin(c *gin.Context) {
 	}))
 }
 
-// Logout handles user logout
-func (h *AuthHandler) Logout(c *gin.Context) {
-	// Since we're using JWT tokens, there's no server-side session to invalidate
-	// The client should simply remove the token
-	c.JSON(http.StatusOK, responses.SuccessResponse(gin.H{"message": "Successfully logged out"}))
-}
-
 // ForgotPassword initiates the password reset process
 func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	var req requests.ForgotPasswordRequest

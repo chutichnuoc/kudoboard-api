@@ -29,15 +29,8 @@ func NewPostHandler(postService *services.PostService, boardService *services.Bo
 	}
 }
 
-// CreatePost creates a new post for an authenticated user
+// CreatePost creates a new post
 func (h *PostHandler) CreatePost(c *gin.Context) {
-	// Get user ID from context
-	userID := c.GetUint("userID")
-	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
-		return
-	}
-
 	// Get board ID from URL
 	boardID, err := strconv.ParseUint(c.Param("boardId"), 10, 32)
 	if err != nil {
@@ -45,11 +38,36 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		return
 	}
 
+	// Check if user is authenticated
+	userID := c.GetUint("userID")
+	isAuthenticated := userID != 0
+
 	// Parse request
 	var req requests.CreatePostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
 		return
+	}
+
+	// Check if board exists
+	board, err := h.boardService.GetBoardByID(uint(boardID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, responses.ErrorResponse("BOARD_NOT_FOUND", "Board not found"))
+		return
+	}
+
+	// For anonymous users, check if board allows anonymous posts
+	if !isAuthenticated {
+		if !board.AllowAnonymous {
+			c.JSON(http.StatusForbidden, responses.ErrorResponse("ANONYMOUS_NOT_ALLOWED", "This board does not allow anonymous posts"))
+			return
+		}
+
+		// Validate author name for anonymous posts
+		if req.AuthorName == "" {
+			c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", "Author name is required for anonymous posts"))
+			return
+		}
 	}
 
 	// Create post using service
@@ -59,62 +77,15 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		return
 	}
 
-	// Get current user for response
-	user, _ := h.authService.GetUserByID(userID)
-
-	// Return response
-	c.JSON(http.StatusCreated, responses.SuccessResponse(
-		responses.NewPostResponse(post, user, nil, 0),
-	))
-}
-
-// CreateAnonymousPost creates a new post for an anonymous user
-func (h *PostHandler) CreateAnonymousPost(c *gin.Context) {
-	// Get board ID from URL
-	boardID, err := strconv.ParseUint(c.Param("boardId"), 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
-		return
-	}
-
-	// Parse request
-	var req requests.CreatePostRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
-		return
-	}
-
-	// Check if board exists and allows anonymous posts
-	board, err := h.boardService.GetBoardByID(uint(boardID))
-	if err != nil {
-		c.JSON(http.StatusNotFound, responses.ErrorResponse("BOARD_NOT_FOUND", "Board not found"))
-		return
-	}
-
-	if !board.AllowAnonymous {
-		c.JSON(http.StatusForbidden, responses.ErrorResponse("ANONYMOUS_NOT_ALLOWED", "This board does not allow anonymous posts"))
-		return
-	}
-
-	// Force request to be anonymous
-	req.IsAnonymous = true
-
-	// Validate author name for anonymous posts
-	if req.AuthorName == "" {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", "Author name is required for anonymous posts"))
-		return
-	}
-
-	// Create post using service
-	post, err := h.postService.CreatePost(uint(boardID), 0, req) // Pass 0 as userID for anonymous
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("POST_CREATION_ERROR", err.Error()))
-		return
+	// Get author if authenticated
+	var author *models.User
+	if isAuthenticated {
+		author, _ = h.authService.GetUserByID(userID)
 	}
 
 	// Return response
 	c.JSON(http.StatusCreated, responses.SuccessResponse(
-		responses.NewPostResponse(post, nil, nil, 0),
+		responses.NewPostResponse(post, author, 0),
 	))
 }
 
@@ -128,7 +99,7 @@ func (h *PostHandler) UpdatePost(c *gin.Context) {
 	}
 
 	// Get post ID from URL
-	postID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	postID, err := strconv.ParseUint(c.Param("postId"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid post ID"))
 		return
@@ -150,19 +121,16 @@ func (h *PostHandler) UpdatePost(c *gin.Context) {
 
 	// Get author if not anonymous
 	var author *models.User
-	if !post.IsAnonymous && post.AuthorID != nil {
+	if post.AuthorID != nil {
 		author, _ = h.authService.GetUserByID(*post.AuthorID)
 	}
-
-	// Get media for this post
-	media, _ := h.postService.GetMediaForPost(post.ID)
 
 	// Count likes
 	likesCount, _ := h.postService.CountPostLikes(post.ID)
 
 	// Return response
 	c.JSON(http.StatusOK, responses.SuccessResponse(
-		responses.NewPostResponse(post, author, media, likesCount),
+		responses.NewPostResponse(post, author, likesCount),
 	))
 }
 
@@ -176,7 +144,7 @@ func (h *PostHandler) DeletePost(c *gin.Context) {
 	}
 
 	// Get post ID from URL
-	postID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	postID, err := strconv.ParseUint(c.Param("postId"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid post ID"))
 		return
@@ -202,7 +170,7 @@ func (h *PostHandler) LikePost(c *gin.Context) {
 	}
 
 	// Get post ID from URL
-	postID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	postID, err := strconv.ParseUint(c.Param("postId"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid post ID"))
 		return
@@ -231,7 +199,7 @@ func (h *PostHandler) UnlikePost(c *gin.Context) {
 	}
 
 	// Get post ID from URL
-	postID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	postID, err := strconv.ParseUint(c.Param("postId"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid post ID"))
 		return
@@ -274,7 +242,7 @@ func (h *PostHandler) ReorderPosts(c *gin.Context) {
 	}
 
 	// Reorder posts using service
-	err = h.postService.ReorderPosts(uint(boardID), userID, req.PostOrders)
+	err = h.postService.ReorderPosts(uint(boardID), userID, req.PostPositions)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("REORDER_ERROR", err.Error()))
 		return

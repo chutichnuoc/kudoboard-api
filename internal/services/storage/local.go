@@ -109,8 +109,19 @@ func (s *LocalStorage) SaveFromReader(reader io.Reader, filename, contentType, d
 }
 
 // Get retrieves a file from local storage
-func (s *LocalStorage) Get(filename string) (io.ReadCloser, error) {
-	fullPath := filepath.Join(s.basePath, filename)
+func (s *LocalStorage) Get(fileURL string) (io.ReadCloser, error) {
+	// Extract file path from URL
+	relativePath, err := extractPathFromURL(fileURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse file URL: %w", err)
+	}
+
+	fullPath := filepath.Join(s.basePath, relativePath)
+
+	// Check if file exists
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("file not found: %s", relativePath)
+	}
 
 	file, err := os.Open(fullPath)
 	if err != nil {
@@ -121,8 +132,19 @@ func (s *LocalStorage) Get(filename string) (io.ReadCloser, error) {
 }
 
 // Delete removes a file from local storage
-func (s *LocalStorage) Delete(filename string) error {
-	fullPath := filepath.Join(s.basePath, filename)
+func (s *LocalStorage) Delete(fileURL string) error {
+	// Extract file path from URL
+	relativePath, err := extractPathFromURL(fileURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse file URL: %w", err)
+	}
+
+	fullPath := filepath.Join(s.basePath, relativePath)
+
+	// Check if file exists before attempting to delete
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		return fmt.Errorf("file not found: %s", relativePath)
+	}
 
 	if err := os.Remove(fullPath); err != nil {
 		return fmt.Errorf("failed to delete file: %w", err)

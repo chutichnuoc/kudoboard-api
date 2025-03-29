@@ -7,33 +7,42 @@ import (
 
 // BoardResponse represents a board in API responses
 type BoardResponse struct {
-	ID                 uint                  `json:"id"`
-	Title              string                `json:"title"`
-	Description        string                `json:"description"`
-	Slug               string                `json:"slug"`
-	Creator            UserResponse          `json:"creator"`
-	BackgroundType     models.BackgroundType `json:"background_type"`
-	BackgroundImageURL string                `json:"background_image_url"`
-	BackgroundColor    string                `json:"background_color"`
-	ThemeID            *uint                 `json:"theme_id,omitempty"`
-	Theme              *ThemeResponse        `json:"theme,omitempty"`
-	IsPrivate          bool                  `json:"is_private"`
-	AllowAnonymous     bool                  `json:"allow_anonymous"`
-	ExpiresAt          *time.Time            `json:"expires_at"`
-	CreatedAt          time.Time             `json:"created_at"`
-	UpdatedAt          time.Time             `json:"updated_at"`
-	PostCount          int                   `json:"post_count"`
+	ID                   uint           `json:"id"`
+	Title                string         `json:"title"`
+	ReceiverName         string         `json:"receiver_name"`
+	Slug                 string         `json:"slug"`
+	MaxPost              uint           `json:"max_post"`
+	Creator              UserResponse   `json:"creator"`
+	FontName             string         `json:"font_name" `
+	FontSize             uint           `json:"font_size"`
+	HeaderColor          string         `json:"header_color"`
+	ShowHeaderColor      bool           `json:"show_header_color"`
+	Theme                *ThemeResponse `json:"theme,omitempty"`
+	Effect               string         `json:"effect"`
+	EnableIntroAnimation bool           `json:"enable_intro_animation"`
+	IsPrivate            bool           `json:"is_private"`
+	IsLocked             bool           `json:"is_locked"`
+	AllowAnonymous       bool           `json:"allow_anonymous"`
+	CreatedAt            time.Time      `json:"created_at"`
+	UpdatedAt            time.Time      `json:"updated_at"`
+	PostCount            int            `json:"post_count"`
+}
+
+// BoardResponseWithRelation extends BoardResponse with user relationship info
+type BoardResponseWithRelation struct {
+	BoardResponse
+	IsOwner    bool `json:"is_owner"`
+	IsFavorite bool `json:"is_favorite"`
+	IsArchived bool `json:"is_archived"`
 }
 
 // ThemeResponse represents a theme in API responses
 type ThemeResponse struct {
 	ID                 uint   `json:"id"`
+	Category           string `json:"category"`
 	Name               string `json:"name"`
-	Description        string `json:"description"`
-	BackgroundColor    string `json:"background_color"`
+	IconUrl            string `json:"icon_url"`
 	BackgroundImageURL string `json:"background_image_url"`
-	AdditionalStyles   string `json:"additional_styles"`
-	IsDefault          bool   `json:"is_default"`
 }
 
 // BoardContributorResponse represents a board contributor in API responses
@@ -47,20 +56,23 @@ type BoardContributorResponse struct {
 // NewBoardResponse creates a new board response from a board model
 func NewBoardResponse(board *models.Board, creator *models.User, postCount int) BoardResponse {
 	response := BoardResponse{
-		ID:                 board.ID,
-		Title:              board.Title,
-		Description:        board.Description,
-		Slug:               board.Slug,
-		BackgroundType:     board.BackgroundType,
-		BackgroundImageURL: board.BackgroundImageURL,
-		BackgroundColor:    board.BackgroundColor,
-		ThemeID:            board.ThemeID,
-		IsPrivate:          board.IsPrivate,
-		AllowAnonymous:     board.AllowAnonymous,
-		ExpiresAt:          board.ExpiresAt,
-		CreatedAt:          board.CreatedAt,
-		UpdatedAt:          board.UpdatedAt,
-		PostCount:          postCount,
+		ID:                   board.ID,
+		Title:                board.Title,
+		ReceiverName:         board.ReceiverName,
+		Slug:                 board.Slug,
+		MaxPost:              board.MaxPost,
+		FontName:             board.FontName,
+		FontSize:             board.FontSize,
+		HeaderColor:          board.HeaderColor,
+		ShowHeaderColor:      board.ShowHeaderColor,
+		Effect:               board.Effect,
+		EnableIntroAnimation: board.EnableIntroAnimation,
+		IsPrivate:            board.IsPrivate,
+		IsLocked:             board.IsLocked,
+		AllowAnonymous:       board.AllowAnonymous,
+		CreatedAt:            board.CreatedAt,
+		UpdatedAt:            board.UpdatedAt,
+		PostCount:            postCount,
 	}
 
 	if creator != nil {
@@ -70,16 +82,24 @@ func NewBoardResponse(board *models.Board, creator *models.User, postCount int) 
 	return response
 }
 
+// NewBoardResponseWithRelation creates a new board response with relation info
+func NewBoardResponseWithRelation(board *models.Board, creator *models.User, postCount int, isOwner, isFavorite, isArchived bool) BoardResponseWithRelation {
+	return BoardResponseWithRelation{
+		BoardResponse: NewBoardResponse(board, creator, postCount),
+		IsOwner:       isOwner,
+		IsFavorite:    isFavorite,
+		IsArchived:    isArchived,
+	}
+}
+
 // NewThemeResponse creates a new theme response from a theme model
 func NewThemeResponse(theme *models.Theme) ThemeResponse {
 	return ThemeResponse{
 		ID:                 theme.ID,
+		Category:           theme.Category,
 		Name:               theme.Name,
-		Description:        theme.Description,
-		BackgroundColor:    theme.BackgroundColor,
+		IconUrl:            theme.IconUrl,
 		BackgroundImageURL: theme.BackgroundImageURL,
-		AdditionalStyles:   theme.AdditionalStyles,
-		IsDefault:          theme.IsDefault,
 	}
 }
 

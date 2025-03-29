@@ -13,8 +13,10 @@ const (
 
 // BoardContributor represents a user who has access to a board
 type BoardContributor struct {
-	BoardID   uint `gorm:"primaryKey"`
-	UserID    uint `gorm:"primaryKey"`
-	Role      Role `gorm:"type:varchar(20);default:'viewer'"`
-	CreatedAt time.Time
+	BoardID    uint `gorm:"primaryKey"`
+	UserID     uint `gorm:"primaryKey"`
+	Role       Role `gorm:"type:varchar(20);default:'viewer'"`
+	IsFavorite bool `gorm:"default:false"`
+	IsArchived bool `gorm:"default:false"`
+	CreatedAt  time.Time
 }
