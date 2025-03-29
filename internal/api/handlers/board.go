@@ -1,0 +1,485 @@
+package handlers
+
+import (
+	"github.com/gin-gonic/gin"
+	"kudoboard-api/internal/config"
+	"kudoboard-api/internal/dto/requests"
+	"kudoboard-api/internal/dto/responses"
+	"kudoboard-api/internal/models"
+	"kudoboard-api/internal/services"
+	"net/http"
+	"strconv"
+)
+
+// BoardHandler handles board-related requests
+type BoardHandler struct {
+	boardService *services.BoardService
+	postService  *services.PostService
+	authService  *services.AuthService
+	cfg          *config.Config
+}
+
+// NewBoardHandler creates a new BoardHandler
+func NewBoardHandler(boardService *services.BoardService, postService *services.PostService, authService *services.AuthService, cfg *config.Config) *BoardHandler {
+	return &BoardHandler{
+		boardService: boardService,
+		postService:  postService,
+		authService:  authService,
+		cfg:          cfg,
+	}
+}
+
+// CreateBoard handles the creation of a new board
+func (h *BoardHandler) CreateBoard(c *gin.Context) {
+	// Get user ID from context
+	userID := c.GetUint("userID")
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		return
+	}
+
+	// Parse request
+	var req requests.CreateBoardRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		return
+	}
+
+	// Create board using service
+	board, err := h.boardService.CreateBoard(userID, req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("BOARD_CREATION_ERROR", err.Error()))
+		return
+	}
+
+	// Get user for response
+	user, _ := c.Get("user")
+
+	c.JSON(http.StatusCreated, responses.SuccessResponse(
+		responses.NewBoardResponse(board, user.(*models.User), 0),
+	))
+}
+
+// ListUserBoards lists all boards created by the current user
+func (h *BoardHandler) ListUserBoards(c *gin.Context) {
+	// Get user ID from context
+	userID := c.GetUint("userID")
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		return
+	}
+
+	// Parse query parameters
+	var query requests.BoardQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		return
+	}
+
+	// Set defaults if not provided
+	if query.Page < 1 {
+		query.Page = 1
+	}
+	if query.PerPage < 1 {
+		query.PerPage = 10
+	}
+
+	// Get boards using service
+	boards, total, err := h.boardService.ListUserBoards(userID, query.Page, query.PerPage, query.Search, query.SortBy, query.Order)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("FETCH_ERROR", err.Error()))
+		return
+	}
+
+	// Get user for response
+	user, _ := c.Get("user")
+
+	// Build response
+	boardResponses := make([]responses.BoardResponse, len(boards))
+	for i, board := range boards {
+		// Count posts for this board
+		var postCount int64
+		h.postService.GetPostsForBoard(board.ID, 1, 0, "", "") // 0 for PerPage means all posts
+
+		// Create response
+		boardResponses[i] = responses.NewBoardResponse(&board, user.(*models.User), int(postCount))
+	}
+
+	// Create pagination info
+	pagination := &responses.Pagination{
+		Total:      total,
+		Page:       query.Page,
+		PerPage:    query.PerPage,
+		TotalPages: int((total + int64(query.PerPage) - 1) / int64(query.PerPage)),
+	}
+
+	c.JSON(http.StatusOK, responses.SuccessResponseWithPagination(boardResponses, pagination))
+}
+
+// GetBoardBySlug gets a board by its slug
+func (h *BoardHandler) GetBoardBySlug(c *gin.Context) {
+	slug := c.Param("slug")
+
+	// Get current user if authenticated
+	var userID uint
+	user, exists := c.Get("user")
+	if exists && user != nil {
+		userID = user.(*models.User).ID
+	}
+
+	// Get board by slug using service
+	board, creator, posts, err := h.boardService.GetBoardBySlug(slug)
+	if err != nil {
+		c.JSON(http.StatusNotFound, responses.ErrorResponse("BOARD_NOT_FOUND", "Board not found"))
+		return
+	}
+
+	// Check if board is private and user is not creator
+	if board.IsPrivate && (userID == 0 || userID != board.CreatorID) {
+		// Check if user is a contributor
+		canAccess, _ := h.boardService.CanAccessBoard(board.ID, userID)
+		if !canAccess {
+			c.JSON(http.StatusForbidden, responses.ErrorResponse("FORBIDDEN", "You don't have access to this board"))
+			return
+		}
+	}
+
+	// Create board response
+	boardResponse := responses.NewBoardResponse(board, creator, len(posts))
+
+	// If board has a theme, include it
+	if board.ThemeID != nil {
+		theme, err := h.boardService.GetThemeByID(*board.ThemeID)
+		if err == nil {
+			themeResponse := responses.NewThemeResponse(theme)
+			boardResponse.Theme = &themeResponse
+		}
+	}
+
+	// Create post responses
+	postResponses := make([]responses.PostResponse, len(posts))
+	for i, post := range posts {
+		// Get post author if not anonymous
+		var author *models.User
+		if !post.IsAnonymous && post.AuthorID != nil {
+			author, _ = h.authService.GetUserByID(*post.AuthorID)
+		}
+
+		// Get media for this post
+		media, _ := h.postService.GetMediaForPost(post.ID)
+
+		// Count likes
+		likesCount, _ := h.postService.CountPostLikes(post.ID)
+
+		// Create post response
+		postResponses[i] = responses.NewPostResponse(&post, author, media, likesCount)
+	}
+
+	// Add posts to response
+	response := gin.H{
+		"board": boardResponse,
+		"posts": postResponses,
+	}
+
+	c.JSON(http.StatusOK, responses.SuccessResponse(response))
+}
+
+// UpdateBoard updates a board
+func (h *BoardHandler) UpdateBoard(c *gin.Context) {
+	// Get user ID from context
+	userID := c.GetUint("userID")
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		return
+	}
+
+	// Get board ID from URL
+	boardID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		return
+	}
+
+	// Parse request
+	var req requests.UpdateBoardRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		return
+	}
+
+	// Update board using service
+	board, err := h.boardService.UpdateBoard(uint(boardID), userID, req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("UPDATE_ERROR", err.Error()))
+		return
+	}
+
+	// Get user for response
+	user, _ := c.Get("user")
+
+	// Count posts
+	posts, _, _ := h.postService.GetPostsForBoard(uint(boardID), 1, 0, "", "")
+
+	c.JSON(http.StatusOK, responses.SuccessResponse(
+		responses.NewBoardResponse(board, user.(*models.User), len(posts)),
+	))
+}
+
+// DeleteBoard deletes a board
+func (h *BoardHandler) DeleteBoard(c *gin.Context) {
+	// Get user ID from context
+	userID := c.GetUint("userID")
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		return
+	}
+
+	// Get board ID from URL
+	boardID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		return
+	}
+
+	// Delete board using service
+	err = h.boardService.DeleteBoard(uint(boardID), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("DELETE_ERROR", err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, responses.SuccessResponse(gin.H{"message": "Board deleted successfully"}))
+}
+
+// ListPublicBoards lists all public boards
+func (h *BoardHandler) ListPublicBoards(c *gin.Context) {
+	// Parse query parameters
+	var query requests.BoardQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		return
+	}
+
+	// Set defaults if not provided
+	if query.Page < 1 {
+		query.Page = 1
+	}
+	if query.PerPage < 1 {
+		query.PerPage = 10
+	}
+
+	// Get public boards using service
+	boards, total, err := h.boardService.ListPublicBoards(query.Page, query.PerPage, query.Search, query.SortBy, query.Order)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("FETCH_ERROR", err.Error()))
+		return
+	}
+
+	// Build response
+	boardResponses := make([]responses.BoardResponse, len(boards))
+	for i, board := range boards {
+		// Get creator
+		creator, _ := h.authService.GetUserByID(board.CreatorID)
+
+		// Count posts
+		posts, _, _ := h.postService.GetPostsForBoard(board.ID, 1, 0, "", "")
+
+		// Create response
+		boardResponses[i] = responses.NewBoardResponse(&board, creator, len(posts))
+	}
+
+	// Create pagination info
+	pagination := &responses.Pagination{
+		Total:      total,
+		Page:       query.Page,
+		PerPage:    query.PerPage,
+		TotalPages: int((total + int64(query.PerPage) - 1) / int64(query.PerPage)),
+	}
+
+	c.JSON(http.StatusOK, responses.SuccessResponseWithPagination(boardResponses, pagination))
+}
+
+// ListBoardContributors lists all contributors for a board
+func (h *BoardHandler) ListBoardContributors(c *gin.Context) {
+	// Get user ID from context
+	userID := c.GetUint("userID")
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		return
+	}
+
+	// Get board ID from URL
+	boardID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		return
+	}
+
+	// Get contributors using service
+	contributors, users, err := h.boardService.ListBoardContributors(uint(boardID), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("FETCH_ERROR", err.Error()))
+		return
+	}
+
+	// Build response
+	contributorResponses := make([]responses.BoardContributorResponse, len(contributors))
+	for i, contributor := range contributors {
+		// Find matching user
+		var user *models.User
+		for _, u := range users {
+			if u.ID == contributor.UserID {
+				user = &u
+				break
+			}
+		}
+
+		if user != nil {
+			// Create response
+			contributorResponses[i] = responses.NewBoardContributorResponse(&contributor, user)
+		}
+	}
+
+	c.JSON(http.StatusOK, responses.SuccessResponse(contributorResponses))
+}
+
+// AddContributor adds a new contributor to a board
+func (h *BoardHandler) AddContributor(c *gin.Context) {
+	// Get user ID from context
+	userID := c.GetUint("userID")
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		return
+	}
+
+	// Get board ID from URL
+	boardID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		return
+	}
+
+	// Parse request
+	var req requests.AddContributorRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		return
+	}
+
+	// Add contributor using service
+	contributor, user, err := h.boardService.AddContributor(uint(boardID), userID, req.Email, req.Role)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("CONTRIBUTOR_ERROR", err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusCreated, responses.SuccessResponse(responses.NewBoardContributorResponse(contributor, user)))
+}
+
+// UpdateContributor updates a contributor's role
+func (h *BoardHandler) UpdateContributor(c *gin.Context) {
+	// Get user ID from context
+	userID := c.GetUint("userID")
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		return
+	}
+
+	// Get board ID and user ID from URL
+	boardID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		return
+	}
+
+	contributorID, err := strconv.ParseUint(c.Param("userId"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid user ID"))
+		return
+	}
+
+	// Parse request
+	var req requests.UpdateContributorRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		return
+	}
+
+	// Update contributor using service
+	contributor, user, err := h.boardService.UpdateContributor(uint(boardID), userID, uint(contributorID), req.Role)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("UPDATE_ERROR", err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, responses.SuccessResponse(responses.NewBoardContributorResponse(contributor, user)))
+}
+
+// RemoveContributor removes a contributor from a board
+func (h *BoardHandler) RemoveContributor(c *gin.Context) {
+	// Get user ID from context
+	userID := c.GetUint("userID")
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		return
+	}
+
+	// Get board ID and user ID from URL
+	boardID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		return
+	}
+
+	contributorID, err := strconv.ParseUint(c.Param("userId"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid user ID"))
+		return
+	}
+
+	// Remove contributor using service
+	err = h.boardService.RemoveContributor(uint(boardID), userID, uint(contributorID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("REMOVE_ERROR", err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, responses.SuccessResponse(gin.H{"message": "Contributor removed successfully"}))
+}
+
+// ListThemes lists all available themes
+func (h *BoardHandler) ListThemes(c *gin.Context) {
+	// Get themes using service
+	themes, err := h.boardService.GetThemes()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("FETCH_ERROR", err.Error()))
+		return
+	}
+
+	// Build response
+	themeResponses := make([]responses.ThemeResponse, len(themes))
+	for i, theme := range themes {
+		themeResponses[i] = responses.NewThemeResponse(&theme)
+	}
+
+	c.JSON(http.StatusOK, responses.SuccessResponse(themeResponses))
+}
+
+// GetTheme gets a theme by ID
+func (h *BoardHandler) GetTheme(c *gin.Context) {
+	// Get theme ID from URL
+	themeID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid theme ID"))
+		return
+	}
+
+	// Get theme using service
+	theme, err := h.boardService.GetThemeByID(uint(themeID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, responses.ErrorResponse("THEME_NOT_FOUND", "Theme not found"))
+		return
+	}
+
+	c.JSON(http.StatusOK, responses.SuccessResponse(responses.NewThemeResponse(theme)))
+}
