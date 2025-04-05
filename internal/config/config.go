@@ -27,6 +27,9 @@ type Config struct {
 	S3Bucket      string
 	S3AccessKey   string
 	S3SecretKey   string
+
+	// Giphy
+	GiphyApiKey string
 }
 
 // Load returns application configuration from environment variables
@@ -57,6 +60,9 @@ func Load() *Config {
 		S3Bucket:      getEnv("S3_BUCKET", ""),
 		S3AccessKey:   getEnv("S3_ACCESS_KEY", ""),
 		S3SecretKey:   getEnv("S3_SECRET_KEY", ""),
+
+		// Giphy
+		GiphyApiKey: getEnv("GIPHY_API_KEY", ""),
 	}
 }
 

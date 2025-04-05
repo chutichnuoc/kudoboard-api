@@ -18,6 +18,7 @@ func Setup(
 	postService *services.PostService,
 	themeService *services.ThemeService,
 	fileService *services.FileService,
+	giphyService *services.GiphyService,
 ) {
 	// Create error middleware with debug mode based on environment
 	errorMiddleware := middleware.NewErrorMiddleware(cfg.Environment != "production")
@@ -48,6 +49,7 @@ func Setup(
 	postHandler := handlers.NewPostHandler(postService, boardService, authService, cfg)
 	themeHandler := handlers.NewThemeHandler(themeService, cfg)
 	fileHandler := handlers.NewFileHandler(fileService, cfg)
+	giphyHandler := handlers.NewGiphyHandler(giphyService, cfg)
 
 	authMiddleware := middleware.NewAuthMiddleware(authService, cfg)
 
@@ -149,5 +151,13 @@ func Setup(
 		{
 			filesAuth.DELETE("", fileHandler.DeleteFile)
 		}
+	}
+
+	giphy := v1.Group("/giphy")
+	{
+		giphy.GET("/search", giphyHandler.Search)
+		giphy.GET("/trending", giphyHandler.Trending)
+		giphy.GET("/random", giphyHandler.Random)
+		giphy.GET("/:gifId", giphyHandler.GetById)
 	}
 }
