@@ -5,7 +5,7 @@ import (
 	"kudoboard-api/internal/api/handlers"
 	"kudoboard-api/internal/api/middleware"
 	"kudoboard-api/internal/config"
-	"kudoboard-api/internal/services"
+	"kudoboard-api/internal/container"
 	"net/http"
 )
 
@@ -13,13 +13,7 @@ import (
 func Setup(
 	router *gin.Engine,
 	cfg *config.Config,
-	authService *services.AuthService,
-	boardService *services.BoardService,
-	postService *services.PostService,
-	themeService *services.ThemeService,
-	fileService *services.FileService,
-	giphyService *services.GiphyService,
-	unsplashService *services.UnsplashService,
+	container *container.Container,
 ) {
 	// Create error middleware with debug mode based on environment
 	errorMiddleware := middleware.NewErrorMiddleware(cfg.Environment != "production")
@@ -44,16 +38,16 @@ func Setup(
 	router.NoRoute(errorMiddleware.NotFoundHandler)
 	router.NoMethod(errorMiddleware.MethodNotAllowedHandler)
 
-	// Create handler instances with services
-	authHandler := handlers.NewAuthHandler(authService, cfg)
-	boardHandler := handlers.NewBoardHandler(boardService, postService, themeService, authService, cfg)
-	postHandler := handlers.NewPostHandler(postService, boardService, authService, cfg)
-	themeHandler := handlers.NewThemeHandler(themeService, cfg)
-	fileHandler := handlers.NewFileHandler(fileService, cfg)
-	giphyHandler := handlers.NewGiphyHandler(giphyService, cfg)
-	unsplashHandler := handlers.NewUnsplashHandler(unsplashService, cfg)
+	// Create handler instances with services from container
+	authHandler := handlers.NewAuthHandler(container.AuthService, cfg)
+	boardHandler := handlers.NewBoardHandler(container.BoardService, container.PostService, container.ThemeService, container.AuthService, cfg)
+	postHandler := handlers.NewPostHandler(container.PostService, container.BoardService, container.AuthService, cfg)
+	themeHandler := handlers.NewThemeHandler(container.ThemeService, cfg)
+	fileHandler := handlers.NewFileHandler(container.FileService, cfg)
+	giphyHandler := handlers.NewGiphyHandler(container.GiphyService, cfg)
+	unsplashHandler := handlers.NewUnsplashHandler(container.UnsplashService, cfg)
 
-	authMiddleware := middleware.NewAuthMiddleware(authService, cfg)
+	authMiddleware := middleware.NewAuthMiddleware(container.AuthService, cfg)
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")

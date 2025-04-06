@@ -3,8 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"kudoboard-api/internal/services"
-	"kudoboard-api/internal/services/storage"
+	"kudoboard-api/internal/container"
 	"log"
 	"net/http"
 	"os"
@@ -45,26 +44,17 @@ func main() {
 		log.Fatalf("Failed to migrate database schema: %v", err)
 	}
 
-	// Initialize storage service
-	storageService, err := storage.NewStorageService(cfg)
+	// Create service container
+	serviceContainer, err := container.NewContainer(cfg, database)
 	if err != nil {
-		log.Fatalf("Failed to initialize storage service: %v", err)
+		log.Fatalf("Failed to initialize service container: %v", err)
 	}
-
-	// Initialize services
-	authService := services.NewAuthService(database, cfg)
-	boardService := services.NewBoardService(database, storageService, cfg)
-	postService := services.NewPostService(database, storageService, cfg, boardService)
-	themeService := services.NewThemeService(database, storageService, cfg)
-	fileService := services.NewFileService(storageService, cfg)
-	giphyService := services.NewGiphyService(cfg)
-	unsplashService := services.NewUnsplashService(cfg)
 
 	// Create Gin router
 	router := gin.Default()
 
-	// Setup routes with all services
-	routes.Setup(router, cfg, authService, boardService, postService, themeService, fileService, giphyService, unsplashService)
+	// Setup routes with the container
+	routes.Setup(router, cfg, serviceContainer)
 
 	// Create HTTP server
 	server := &http.Server{
