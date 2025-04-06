@@ -19,6 +19,7 @@ func Setup(
 	themeService *services.ThemeService,
 	fileService *services.FileService,
 	giphyService *services.GiphyService,
+	unsplashService *services.UnsplashService,
 ) {
 	// Create error middleware with debug mode based on environment
 	errorMiddleware := middleware.NewErrorMiddleware(cfg.Environment != "production")
@@ -50,6 +51,7 @@ func Setup(
 	themeHandler := handlers.NewThemeHandler(themeService, cfg)
 	fileHandler := handlers.NewFileHandler(fileService, cfg)
 	giphyHandler := handlers.NewGiphyHandler(giphyService, cfg)
+	unsplashHandler := handlers.NewUnsplashHandler(unsplashService, cfg)
 
 	authMiddleware := middleware.NewAuthMiddleware(authService, cfg)
 
@@ -159,5 +161,12 @@ func Setup(
 		giphy.GET("/trending", giphyHandler.Trending)
 		giphy.GET("/random", giphyHandler.Random)
 		giphy.GET("/:gifId", giphyHandler.GetById)
+	}
+
+	unsplash := v1.Group("/unsplash")
+	{
+		unsplash.GET("/search", unsplashHandler.Search)
+		unsplash.GET("/random", unsplashHandler.Random)
+		unsplash.GET("/:photoId", unsplashHandler.GetById)
 	}
 }

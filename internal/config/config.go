@@ -30,6 +30,9 @@ type Config struct {
 
 	// Giphy
 	GiphyApiKey string
+
+	// Unsplash
+	UnsplashAccessKey string
 }
 
 // Load returns application configuration from environment variables
@@ -63,6 +66,9 @@ func Load() *Config {
 
 		// Giphy
 		GiphyApiKey: getEnv("GIPHY_API_KEY", ""),
+
+		// Unsplash
+		UnsplashAccessKey: getEnv("UNSPLASH_ACCESS_KEY", ""),
 	}
 }
 

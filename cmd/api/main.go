@@ -58,12 +58,13 @@ func main() {
 	themeService := services.NewThemeService(database, storageService, cfg)
 	fileService := services.NewFileService(storageService, cfg)
 	giphyService := services.NewGiphyService(cfg)
+	unsplashService := services.NewUnsplashService(cfg)
 
 	// Create Gin router
 	router := gin.Default()
 
 	// Setup routes with all services
-	routes.Setup(router, cfg, authService, boardService, postService, themeService, fileService, giphyService)
+	routes.Setup(router, cfg, authService, boardService, postService, themeService, fileService, giphyService, unsplashService)
 
 	// Create HTTP server
 	server := &http.Server{
