@@ -74,7 +74,7 @@ func (s *S3Storage) Save(file *multipart.FileHeader, directory string) (*FileInf
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to upload file to S3: %w", err)
+		return nil, fmt.Errorf("failed to upload file '%s' to S3 bucket '%s': %w", key, s.bucket, err)
 	}
 
 	// Return file info using our own GetURL method to ensure consistent URL format
@@ -104,7 +104,7 @@ func (s *S3Storage) SaveFromReader(reader io.Reader, filename, contentType, dire
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to upload file to S3: %w", err)
+		return nil, fmt.Errorf("failed to upload file '%s' to S3 bucket '%s': %w", key, s.bucket, err)
 	}
 
 	// Get the size by performing a head request

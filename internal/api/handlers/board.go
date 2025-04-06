@@ -7,6 +7,7 @@ import (
 	"kudoboard-api/internal/dto/responses"
 	"kudoboard-api/internal/models"
 	"kudoboard-api/internal/services"
+	"kudoboard-api/internal/utils"
 	"net/http"
 	"strconv"
 )
@@ -36,21 +37,21 @@ func (h *BoardHandler) CreateBoard(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Parse request
 	var req requests.CreateBoardRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		_ = c.Error(utils.NewValidationError(err.Error()))
 		return
 	}
 
 	// Create board using service
 	board, err := h.boardService.CreateBoard(userID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("BOARD_CREATION_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -67,14 +68,14 @@ func (h *BoardHandler) ListUserBoards(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Parse query parameters
 	var query requests.BoardQuery
 	if err := c.ShouldBindQuery(&query); err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		_ = c.Error(utils.NewValidationError(err.Error()))
 		return
 	}
 
@@ -89,7 +90,7 @@ func (h *BoardHandler) ListUserBoards(c *gin.Context) {
 	// Get boards using service
 	boardsWithInfo, total, err := h.boardService.ListUserBoards(userID, query.Page, query.PerPage, query.Search, query.SortBy, query.Order)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("FETCH_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -134,7 +135,7 @@ func (h *BoardHandler) GetBoardBySlug(c *gin.Context) {
 	// Get board by slug using service
 	board, creator, posts, err := h.boardService.GetBoardBySlug(slug)
 	if err != nil {
-		c.JSON(http.StatusNotFound, responses.ErrorResponse("BOARD_NOT_FOUND", "Board not found"))
+		_ = c.Error(err)
 		return
 	}
 
@@ -143,7 +144,7 @@ func (h *BoardHandler) GetBoardBySlug(c *gin.Context) {
 		// Check if user is a contributor
 		canAccess, _ := h.boardService.CanAccessBoard(board.ID, userID)
 		if !canAccess {
-			c.JSON(http.StatusForbidden, responses.ErrorResponse("FORBIDDEN", "You don't have access to this board"))
+			_ = c.Error(utils.NewForbiddenError("You don't have access to this board"))
 			return
 		}
 	}
@@ -190,28 +191,28 @@ func (h *BoardHandler) UpdateBoard(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Get board ID from URL
 	boardID, err := strconv.ParseUint(c.Param("boardId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid board ID"))
 		return
 	}
 
 	// Parse request
 	var req requests.UpdateBoardRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		_ = c.Error(utils.NewValidationError(err.Error()))
 		return
 	}
 
 	// Update board using service
 	board, err := h.boardService.UpdateBoard(uint(boardID), userID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("UPDATE_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -231,21 +232,21 @@ func (h *BoardHandler) DeleteBoard(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Get board ID from URL
 	boardID, err := strconv.ParseUint(c.Param("boardId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid board ID format"))
 		return
 	}
 
 	// Delete board using service
 	err = h.boardService.DeleteBoard(uint(boardID), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("DELETE_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -257,28 +258,28 @@ func (h *BoardHandler) ToggleBoardLock(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Get board ID from URL
 	boardID, err := strconv.ParseUint(c.Param("boardId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid board ID"))
 		return
 	}
 
 	// Parse request
 	var req requests.LockBoardRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		_ = c.Error(utils.NewValidationError(err.Error()))
 		return
 	}
 
 	// Toggle board lock using service
 	board, err := h.boardService.ToggleBoardLock(uint(boardID), userID, req.IsLocked)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("UPDATE_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -298,21 +299,21 @@ func (h *BoardHandler) ListBoardContributors(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Get board ID from URL
 	boardID, err := strconv.ParseUint(c.Param("boardId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid board ID"))
 		return
 	}
 
 	// Get contributors using service
 	contributors, users, err := h.boardService.ListBoardContributors(uint(boardID), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("FETCH_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -342,28 +343,28 @@ func (h *BoardHandler) UpdateBoardPreferences(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Get board ID from URL
 	boardID, err := strconv.ParseUint(c.Param("boardId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid board ID"))
 		return
 	}
 
 	// Parse request
 	var req requests.UpdateBoardPreferencesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		_ = c.Error(utils.NewValidationError(err.Error()))
 		return
 	}
 
 	// Update preferences using service
 	err = h.boardService.UpdateBoardPreferences(uint(boardID), userID, req.IsFavorite, req.IsArchived)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("UPDATE_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -375,28 +376,28 @@ func (h *BoardHandler) AddContributor(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Get board ID from URL
 	boardID, err := strconv.ParseUint(c.Param("boardId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid board ID"))
 		return
 	}
 
 	// Parse request
 	var req requests.AddContributorRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		_ = c.Error(utils.NewValidationError(err.Error()))
 		return
 	}
 
 	// Add contributor using service
 	contributor, user, err := h.boardService.AddContributor(uint(boardID), userID, req.Email, req.Role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("CONTRIBUTOR_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -408,34 +409,34 @@ func (h *BoardHandler) UpdateContributor(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Get board ID and user ID from URL
 	boardID, err := strconv.ParseUint(c.Param("boardId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid board ID"))
 		return
 	}
 
 	contributorID, err := strconv.ParseUint(c.Param("contributorId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid user ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid user ID"))
 		return
 	}
 
 	// Parse request
 	var req requests.UpdateContributorRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		_ = c.Error(utils.NewValidationError(err.Error()))
 		return
 	}
 
 	// Update contributor using service
 	contributor, user, err := h.boardService.UpdateContributor(uint(boardID), userID, uint(contributorID), req.Role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("UPDATE_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -447,27 +448,27 @@ func (h *BoardHandler) RemoveContributor(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Get board ID and user ID from URL
 	boardID, err := strconv.ParseUint(c.Param("boardId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid board ID"))
 		return
 	}
 
 	contributorID, err := strconv.ParseUint(c.Param("contributorId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid user ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid user ID"))
 		return
 	}
 
 	// Remove contributor using service
 	err = h.boardService.RemoveContributor(uint(boardID), userID, uint(contributorID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("REMOVE_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 

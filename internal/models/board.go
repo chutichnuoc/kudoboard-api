@@ -29,7 +29,7 @@ type Board struct {
 func (b *Board) BeforeCreate(tx *gorm.DB) error {
 	if b.Slug == "" {
 		// Generate a URL-friendly slug from a UUID
-		b.Slug = uuid.New().String()[0:18]
+		b.Slug = uuid.New().String()
 	}
 	return nil
 }

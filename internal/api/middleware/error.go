@@ -3,13 +3,14 @@ package middleware
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"runtime/debug"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	"kudoboard-api/internal/dto/responses"
+	"kudoboard-api/internal/log"
 	"kudoboard-api/internal/utils"
 )
 
@@ -31,24 +32,27 @@ func (m *ErrorMiddleware) ErrorHandler() gin.HandlerFunc {
 		// Set up recovery from panics
 		defer func() {
 			if r := recover(); r != nil {
-				// Log the panic
+				// Log the panic with stack trace
 				stackTrace := string(debug.Stack())
-				log.Printf("Panic recovered: %v\nStack Trace:\n%s", r, stackTrace)
+				logger := log.ContextLogger(c)
+				logger.Error("Panic recovered",
+					zap.Any("panic", r),
+					zap.String("stack", stackTrace),
+				)
 
-				// Determine if we should show stack trace in the response
-				var errorDetails string
+				// Create response with appropriate detail level
+				errorMessage := "An unexpected error occurred"
 				if m.Debug {
-					errorDetails = fmt.Sprintf("%v", r)
-				} else {
-					errorDetails = "An unexpected error occurred"
+					errorMessage = fmt.Sprintf("%v", r)
 				}
 
-				// If response is already written, don't attempt to write again
+				// Only write response if it hasn't been written yet
 				if !c.Writer.Written() {
-					// Return a 500 response
+					appError := utils.NewInternalError(errorMessage, fmt.Errorf("%v", r))
+
 					c.JSON(http.StatusInternalServerError, responses.ErrorResponse(
-						"INTERNAL_SERVER_ERROR",
-						errorDetails,
+						appError.Code,
+						errorMessage,
 					))
 				}
 				c.Abort()
@@ -62,16 +66,9 @@ func (m *ErrorMiddleware) ErrorHandler() gin.HandlerFunc {
 		if len(c.Errors) > 0 {
 			err := c.Errors.Last().Err
 
-			// Log the error
-			if m.Debug {
-				log.Printf("Error: %v\nStack Trace:\n%s", err, debug.Stack())
-			} else {
-				log.Printf("Error: %v", err)
-			}
-
-			// If response hasn't been written yet (by panic recovery or other middleware)
+			// If response hasn't been written yet
 			if !c.Writer.Written() {
-				statusCode, errorResponse := m.processError(err, c.Request.Method, c.Request.URL.Path)
+				statusCode, errorResponse := m.processError(err, c)
 				c.JSON(statusCode, errorResponse)
 			}
 		}
@@ -79,95 +76,111 @@ func (m *ErrorMiddleware) ErrorHandler() gin.HandlerFunc {
 }
 
 // processError analyzes the error and returns appropriate status code and response
-func (m *ErrorMiddleware) processError(err error, method, path string) (int, responses.APIResponse) {
-	// Check if it's one of our app errors
+func (m *ErrorMiddleware) processError(err error, c *gin.Context) (int, responses.APIResponse) {
+	logger := log.ContextLogger(c)
+
+	// Check if it's our app error type
 	var appError *utils.AppError
-	if errors.As(err, &appError) {
-		return m.handleAppError(appError)
+	if !errors.As(err, &appError) {
+		// Convert to app error
+		appError = utils.AsAppError(err)
 	}
 
-	// Handle validation errors (from gin binding)
-	if strings.Contains(err.Error(), "binding") || strings.Contains(err.Error(), "validate") {
-		return http.StatusBadRequest, responses.ErrorResponse(
-			"VALIDATION_ERROR",
-			err.Error(),
-		)
+	// Log the error with contextual information
+	logFields := []zap.Field{
+		zap.String("error_code", appError.Code),
+		zap.Error(err),
 	}
 
-	// Handle database errors
-	if strings.Contains(err.Error(), "database") || strings.Contains(err.Error(), "sql") {
-		// Don't expose detailed database errors to clients
-		errorMsg := "Database operation failed"
-		if m.Debug {
-			errorMsg = err.Error()
+	if appError.Fields != nil {
+		for key, value := range appError.Fields {
+			logFields = append(logFields, zap.Any(key, value))
 		}
-		return http.StatusInternalServerError, responses.ErrorResponse(
-			"DATABASE_ERROR",
-			errorMsg,
-		)
 	}
 
-	// Handle authentication errors
-	if strings.Contains(err.Error(), "token") || strings.Contains(err.Error(), "auth") {
-		return http.StatusUnauthorized, responses.ErrorResponse(
-			"AUTHENTICATION_ERROR",
-			err.Error(),
-		)
+	if m.Debug && appError.GetStack() != "" {
+		logFields = append(logFields, zap.String("stack", appError.GetStack()))
 	}
 
-	// Default to internal server error for unhandled error types
-	errorMsg := "An unexpected error occurred"
-	if m.Debug {
-		errorMsg = err.Error()
-	}
-
-	// Log the unhandled error for investigation
-	log.Printf("Unhandled error type on %s %s: %v", method, path, err)
-
-	return http.StatusInternalServerError, responses.ErrorResponse(
-		"INTERNAL_SERVER_ERROR",
-		errorMsg,
-	)
-}
-
-// handleAppError processes application-specific errors
-func (m *ErrorMiddleware) handleAppError(appError *utils.AppError) (int, responses.APIResponse) {
-	// Map app error to HTTP status code
-	var statusCode int
-
+	// Log based on error type
 	switch {
-	case errors.Is(appError.Err, utils.ErrNotFound):
-		statusCode = http.StatusNotFound
-	case errors.Is(appError.Err, utils.ErrUnauthorized):
-		statusCode = http.StatusUnauthorized
-	case errors.Is(appError.Err, utils.ErrForbidden):
-		statusCode = http.StatusForbidden
-	case errors.Is(appError.Err, utils.ErrBadRequest):
-		statusCode = http.StatusBadRequest
-	case errors.Is(appError.Err, utils.ErrInternalError):
-		statusCode = http.StatusInternalServerError
+	case errors.Is(err, utils.ErrNotFound):
+		logger.Info("Resource not found", logFields...)
+	case errors.Is(err, utils.ErrBadRequest) || errors.Is(err, utils.ErrValidation):
+		logger.Info("Bad request", logFields...)
+	case errors.Is(err, utils.ErrUnauthorized):
+		logger.Info("Unauthorized access attempt", logFields...)
+	case errors.Is(err, utils.ErrForbidden):
+		logger.Warn("Forbidden access attempt", logFields...)
 	default:
-		statusCode = http.StatusInternalServerError
+		logger.Error("Internal server error", logFields...)
 	}
 
-	// Create response
+	// Map the error to HTTP status code and create response
+	statusCode := m.mapErrorToStatusCode(appError)
 	response := responses.ErrorResponse(
 		appError.Code,
 		appError.Message,
 	)
 
-	// Add details if in debug mode and we have an underlying error
-	if m.Debug && errors.Unwrap(appError) != nil {
-		detailErr := errors.Unwrap(appError)
-		response.Error.Details = detailErr.Error()
+	// Add details if in debug mode
+	if m.Debug {
+		details := m.buildErrorDetails(appError)
+		if details != "" {
+			response.Error.Details = details
+		}
 	}
 
 	return statusCode, response
 }
 
+// mapErrorToStatusCode maps app error to HTTP status code
+func (m *ErrorMiddleware) mapErrorToStatusCode(appError *utils.AppError) int {
+	switch {
+	case errors.Is(appError.Err, utils.ErrNotFound):
+		return http.StatusNotFound
+	case errors.Is(appError.Err, utils.ErrUnauthorized):
+		return http.StatusUnauthorized
+	case errors.Is(appError.Err, utils.ErrForbidden):
+		return http.StatusForbidden
+	case errors.Is(appError.Err, utils.ErrBadRequest):
+		return http.StatusBadRequest
+	case errors.Is(appError.Err, utils.ErrValidation):
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+// buildErrorDetails creates detailed error information for debug mode
+func (m *ErrorMiddleware) buildErrorDetails(appError *utils.AppError) string {
+	var details []string
+
+	// Add original error
+	if appError.Err != nil && !errors.Is(appError.Err, utils.ErrInternalError) &&
+		!errors.Is(appError.Err, utils.ErrBadRequest) && !errors.Is(appError.Err, utils.ErrNotFound) &&
+		!errors.Is(appError.Err, utils.ErrForbidden) && !errors.Is(appError.Err, utils.ErrUnauthorized) {
+		details = append(details, fmt.Sprintf("Cause: %v", appError.Err))
+	}
+
+	// Add stack trace
+	if stack := appError.GetStack(); stack != "" {
+		details = append(details, fmt.Sprintf("Stack: %s", stack))
+	}
+
+	// Add operation ID if present
+	if appError.OperationID != "" {
+		details = append(details, fmt.Sprintf("Operation: %s", appError.OperationID))
+	}
+
+	return strings.Join(details, "\n")
+}
+
 // NotFoundHandler handles 404 errors
 func (m *ErrorMiddleware) NotFoundHandler(c *gin.Context) {
-	log.Printf("Not found: %s %s", c.Request.Method, c.Request.URL.Path)
+	log.ContextLogger(c).Info("Resource not found",
+		zap.String("path", c.Request.URL.Path),
+	)
 
 	c.JSON(http.StatusNotFound, responses.ErrorResponse(
 		"NOT_FOUND",
@@ -177,7 +190,10 @@ func (m *ErrorMiddleware) NotFoundHandler(c *gin.Context) {
 
 // MethodNotAllowedHandler handles 405 errors
 func (m *ErrorMiddleware) MethodNotAllowedHandler(c *gin.Context) {
-	log.Printf("Method not allowed: %s %s", c.Request.Method, c.Request.URL.Path)
+	log.ContextLogger(c).Info("Method not allowed",
+		zap.String("method", c.Request.Method),
+		zap.String("path", c.Request.URL.Path),
+	)
 
 	c.JSON(http.StatusMethodNotAllowed, responses.ErrorResponse(
 		"METHOD_NOT_ALLOWED",

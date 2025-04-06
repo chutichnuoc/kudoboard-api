@@ -29,7 +29,8 @@ func (s *AuthService) RegisterUser(name, email, password string) (*models.User, 
 	// Check if user already exists
 	var existingUser models.User
 	if result := s.db.Where("email = ?", email).First(&existingUser); result.Error == nil {
-		return nil, "", utils.NewBadRequestError("User with this email already exists")
+		return nil, "", utils.NewBadRequestError("User with this email already exists").
+			WithField("email", email)
 	}
 
 	// Create new user
@@ -41,13 +42,16 @@ func (s *AuthService) RegisterUser(name, email, password string) (*models.User, 
 
 	// Save user to database
 	if result := s.db.Create(&user); result.Error != nil {
-		return nil, "", utils.NewInternalError("Failed to create user", result.Error)
+		return nil, "", utils.NewInternalError("Account creation failed", result.Error).
+			WithField("email", email).
+			WithField("name", name)
 	}
 
 	// Generate token
 	token, err := utils.GenerateToken(user.ID, s.cfg.JWTSecret, s.cfg.JWTExpiresIn)
 	if err != nil {
-		return nil, "", utils.NewInternalError("Failed to generate token", err)
+		return nil, "", utils.NewInternalError("Failed to generate token", err).
+			WithField("user_id", user.ID)
 	}
 
 	return &user, token, nil
@@ -58,18 +62,24 @@ func (s *AuthService) LoginUser(email, password string) (*models.User, string, e
 	// Find user by email
 	var user models.User
 	if result := s.db.Where("email = ?", email).First(&user); result.Error != nil {
-		return nil, "", utils.NewUnauthorizedError("Invalid email or password")
+		return nil, "", utils.NewUnauthorizedError("Invalid email or password").
+			WithField("email", email).
+			WithField("error_type", "user_not_found")
 	}
 
 	// Check password
 	if err := user.CheckPassword(password); err != nil {
-		return nil, "", utils.NewUnauthorizedError("Invalid email or password")
+		return nil, "", utils.NewUnauthorizedError("Invalid email or password").
+			WithField("email", email).
+			WithField("user_id", user.ID).
+			WithField("error_type", "invalid_password")
 	}
 
 	// Generate token
 	token, err := utils.GenerateToken(user.ID, s.cfg.JWTSecret, s.cfg.JWTExpiresIn)
 	if err != nil {
-		return nil, "", utils.NewInternalError("Failed to generate token", err)
+		return nil, "", utils.NewInternalError("Authentication failed", err).
+			WithField("user_id", user.ID)
 	}
 
 	return &user, token, nil
@@ -88,7 +98,8 @@ func (s *AuthService) GoogleLogin(accessToken string) (*models.User, string, err
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", utils.NewUnauthorizedError("Invalid Google token")
+		return nil, "", utils.NewUnauthorizedError("Invalid Google token").
+			WithField("status_code", resp.StatusCode)
 	}
 
 	// Parse the response
@@ -106,7 +117,8 @@ func (s *AuthService) GoogleLogin(accessToken string) (*models.User, string, err
 
 	// Validate email verification
 	if tokenInfo.EmailVerified != "true" {
-		return nil, "", utils.NewUnauthorizedError("Email not verified with Google")
+		return nil, "", utils.NewUnauthorizedError("Email not verified with Google").
+			WithField("email", tokenInfo.Email)
 	}
 
 	// Find user by Google ID or email
@@ -126,7 +138,9 @@ func (s *AuthService) GoogleLogin(accessToken string) (*models.User, string, err
 		}
 
 		if result := s.db.Create(&user); result.Error != nil {
-			return nil, "", utils.NewInternalError("Failed to create user", result.Error)
+			return nil, "", utils.NewInternalError("Account creation failed", result.Error).
+				WithField("email", tokenInfo.Email).
+				WithField("google_id", tokenInfo.Sub)
 		}
 	} else {
 		// User exists, update Google ID and profile if needed
@@ -145,7 +159,9 @@ func (s *AuthService) GoogleLogin(accessToken string) (*models.User, string, err
 
 		if updates {
 			if result := s.db.Save(&user); result.Error != nil {
-				return nil, "", utils.NewInternalError("Failed to update user", result.Error)
+				return nil, "", utils.NewInternalError("Failed to update user", result.Error).
+					WithField("user_id", user.ID).
+					WithField("google_id", tokenInfo.Sub)
 			}
 		}
 	}
@@ -153,7 +169,8 @@ func (s *AuthService) GoogleLogin(accessToken string) (*models.User, string, err
 	// Generate JWT token
 	token, err := utils.GenerateToken(user.ID, s.cfg.JWTSecret, s.cfg.JWTExpiresIn)
 	if err != nil {
-		return nil, "", utils.NewInternalError("Failed to generate token", err)
+		return nil, "", utils.NewInternalError("Failed to generate token", err).
+			WithField("user_id", user.ID)
 	}
 
 	return &user, token, nil
@@ -174,7 +191,8 @@ func (s *AuthService) FacebookLogin(accessToken string) (*models.User, string, e
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", utils.NewUnauthorizedError("Invalid Facebook token")
+		return nil, "", utils.NewUnauthorizedError("Invalid Facebook token").
+			WithField("status_code", resp.StatusCode)
 	}
 
 	// Parse the response
@@ -195,7 +213,8 @@ func (s *AuthService) FacebookLogin(accessToken string) (*models.User, string, e
 
 	// Ensure we got an email (Facebook might not return it if user hasn't verified it)
 	if fbUserInfo.Email == "" {
-		return nil, "", utils.NewUnauthorizedError("Email not provided by Facebook. Please ensure your email is verified with Facebook")
+		return nil, "", utils.NewUnauthorizedError("Email not provided by Facebook. Please ensure your email is verified with Facebook").
+			WithField("facebook_id", fbUserInfo.ID)
 	}
 
 	// Find user by Facebook ID or email
@@ -216,7 +235,9 @@ func (s *AuthService) FacebookLogin(accessToken string) (*models.User, string, e
 		}
 
 		if result := s.db.Create(&user); result.Error != nil {
-			return nil, "", utils.NewInternalError("Failed to create user", result.Error)
+			return nil, "", utils.NewInternalError("Account creation failed", result.Error).
+				WithField("email", fbUserInfo.Email).
+				WithField("facebook_id", fbUserInfo.ID)
 		}
 	} else {
 		// User exists, update Facebook ID and profile if needed
@@ -237,7 +258,9 @@ func (s *AuthService) FacebookLogin(accessToken string) (*models.User, string, e
 
 		if updates {
 			if result := s.db.Save(&user); result.Error != nil {
-				return nil, "", utils.NewInternalError("Failed to update user", result.Error)
+				return nil, "", utils.NewInternalError("Failed to update user", result.Error).
+					WithField("user_id", user.ID).
+					WithField("facebook_id", fbUserInfo.ID)
 			}
 		}
 	}
@@ -245,7 +268,8 @@ func (s *AuthService) FacebookLogin(accessToken string) (*models.User, string, e
 	// Generate JWT token
 	token, err := utils.GenerateToken(user.ID, s.cfg.JWTSecret, s.cfg.JWTExpiresIn)
 	if err != nil {
-		return nil, "", utils.NewInternalError("Failed to generate token", err)
+		return nil, "", utils.NewInternalError("Failed to generate token", err).
+			WithField("user_id", user.ID)
 	}
 
 	return &user, token, nil
@@ -255,7 +279,8 @@ func (s *AuthService) FacebookLogin(accessToken string) (*models.User, string, e
 func (s *AuthService) GetUserByID(userID uint) (*models.User, error) {
 	var user models.User
 	if result := s.db.First(&user, userID); result.Error != nil {
-		return nil, utils.NewNotFoundError("User not found")
+		return nil, utils.NewNotFoundError("User not found").
+			WithField("user_id", userID)
 	}
 	return &user, nil
 }
@@ -277,7 +302,8 @@ func (s *AuthService) UpdateUser(userID uint, name, profilePicture string) (*mod
 
 	// Save changes
 	if result := s.db.Save(&user); result.Error != nil {
-		return nil, utils.NewInternalError("Failed to update user", result.Error)
+		return nil, utils.NewInternalError("Failed to update user", result.Error).
+			WithField("user_id", userID)
 	}
 
 	return &user, nil
@@ -314,7 +340,8 @@ func (s *AuthService) ResetPassword(token, newPassword string) error {
 func (s *AuthService) VerifyToken(tokenString string) (uint, error) {
 	claims, err := utils.VerifyToken(tokenString, s.cfg.JWTSecret)
 	if err != nil {
-		return 0, utils.NewUnauthorizedError("Invalid or expired token")
+		return 0, utils.NewUnauthorizedError("Invalid or expired token").
+			WithField("error", err.Error())
 	}
 	return claims.UserID, nil
 }

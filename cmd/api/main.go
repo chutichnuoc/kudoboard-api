@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"kudoboard-api/internal/api/routes"
+	"kudoboard-api/internal/config"
 	"kudoboard-api/internal/container"
-	"log"
+	"kudoboard-api/internal/db"
+	"kudoboard-api/internal/log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,16 +16,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-
-	"kudoboard-api/internal/api/routes"
-	"kudoboard-api/internal/config"
-	"kudoboard-api/internal/db"
+	"go.uber.org/zap"
 )
 
 func main() {
 	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
-		log.Println("Warning: .env file not found")
+		log.Warn("Warning: .env file not found")
 	}
 
 	// Initialize configuration
@@ -36,22 +36,22 @@ func main() {
 	// Connect to database
 	database, err := db.Connect(cfg)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatal("Failed to connect to database", zap.Error(err))
 	}
 
 	// Migrate database schema
 	if err := db.MigrateSchema(database); err != nil {
-		log.Fatalf("Failed to migrate database schema: %v", err)
+		log.Fatal("Failed to migrate database schema", zap.Error(err))
 	}
 
 	// Create service container
 	serviceContainer, err := container.NewContainer(cfg, database)
 	if err != nil {
-		log.Fatalf("Failed to initialize service container: %v", err)
+		log.Fatal("Failed to initialize service container", zap.Error(err))
 	}
 
 	// Create Gin router
-	router := gin.Default()
+	router := gin.New()
 
 	// Setup routes with the container
 	routes.Setup(router, cfg, serviceContainer)
@@ -64,9 +64,9 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("Server running on port %s\n", cfg.Port)
+		log.Info("Server running", zap.String("port", cfg.Port))
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("Failed to start server: %v", err)
+			log.Fatal("Failed to start server", zap.Error(err))
 		}
 	}()
 
@@ -74,7 +74,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down server...")
+	log.Info("Shutting down server...")
 
 	// Create context with timeout for shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -82,8 +82,11 @@ func main() {
 
 	// Shutdown server
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		log.Fatal("Server forced to shutdown", zap.Error(err))
 	}
 
-	log.Println("Server exited properly")
+	// Flush any buffered log entries
+	log.Shutdown()
+
+	log.Info("Server exited properly")
 }

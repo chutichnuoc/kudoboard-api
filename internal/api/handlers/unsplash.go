@@ -5,6 +5,7 @@ import (
 	"kudoboard-api/internal/config"
 	"kudoboard-api/internal/dto/responses"
 	"kudoboard-api/internal/services"
+	"kudoboard-api/internal/utils"
 	"net/http"
 	"strconv"
 )
@@ -28,7 +29,7 @@ func (h *UnsplashHandler) Search(c *gin.Context) {
 	// Parse query parameters
 	query := c.Query("query")
 	if query == "" {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_QUERY", "Query parameter 'query' is required"))
+		_ = c.Error(utils.NewBadRequestError("Query parameter 'query' is required"))
 		return
 	}
 
@@ -39,11 +40,7 @@ func (h *UnsplashHandler) Search(c *gin.Context) {
 	// Call Unsplash service
 	result, err := h.unsplashService.Search(query, page, perPage, orderBy)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if err.Error() == "Invalid Unsplash API credentials" {
-			status = http.StatusUnauthorized
-		}
-		c.JSON(status, responses.ErrorResponse("UNSPLASH_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -69,11 +66,7 @@ func (h *UnsplashHandler) Random(c *gin.Context) {
 	// Call Unsplash service
 	result, err := h.unsplashService.Random(count, query, topics, username, collections, featured)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if err.Error() == "Invalid Unsplash API credentials" {
-			status = http.StatusUnauthorized
-		}
-		c.JSON(status, responses.ErrorResponse("UNSPLASH_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -85,20 +78,14 @@ func (h *UnsplashHandler) GetById(c *gin.Context) {
 	// Get photo ID from URL
 	photoID := c.Param("photoId")
 	if photoID == "" {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Photo ID is required"))
+		_ = c.Error(utils.NewBadRequestError("Photo ID is required"))
 		return
 	}
 
 	// Call Unsplash service
 	result, err := h.unsplashService.GetById(photoID)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if err.Error() == "Photo not found" {
-			status = http.StatusNotFound
-		} else if err.Error() == "Invalid Unsplash API credentials" {
-			status = http.StatusUnauthorized
-		}
-		c.JSON(status, responses.ErrorResponse("UNSPLASH_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 

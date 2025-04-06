@@ -19,6 +19,8 @@ func Setup(
 	errorMiddleware := middleware.NewErrorMiddleware(cfg.Environment != "production")
 
 	// Apply global middleware
+	router.Use(middleware.RequestIDMiddleware())
+	router.Use(middleware.LoggingMiddleware())
 	router.Use(errorMiddleware.ErrorHandler())
 	router.Use(middleware.CorsMiddleware(cfg))
 

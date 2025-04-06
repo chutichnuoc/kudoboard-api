@@ -5,6 +5,7 @@ import (
 	"kudoboard-api/internal/config"
 	"kudoboard-api/internal/dto/responses"
 	"kudoboard-api/internal/services"
+	"kudoboard-api/internal/utils"
 	"net/http"
 	"strconv"
 )
@@ -28,7 +29,7 @@ func (h *GiphyHandler) Search(c *gin.Context) {
 	// Parse query parameters
 	query := c.Query("q")
 	if query == "" {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_QUERY", "Query parameter 'q' is required"))
+		_ = c.Error(utils.NewBadRequestError("Query parameter 'q' is required"))
 		return
 	}
 
@@ -40,7 +41,7 @@ func (h *GiphyHandler) Search(c *gin.Context) {
 	// Call Giphy service
 	result, err := h.giphyService.Search(query, limit, offset, rating, lang)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("GIPHY_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -57,7 +58,7 @@ func (h *GiphyHandler) Trending(c *gin.Context) {
 	// Call Giphy service
 	result, err := h.giphyService.Trending(limit, offset, rating)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("GIPHY_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -69,18 +70,14 @@ func (h *GiphyHandler) GetById(c *gin.Context) {
 	// Get GIF ID from URL
 	gifId := c.Param("gifId")
 	if gifId == "" {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "GIF ID is required"))
+		_ = c.Error(utils.NewBadRequestError("GIF ID is required"))
 		return
 	}
 
 	// Call Giphy service
 	result, err := h.giphyService.GetById(gifId)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if err.Error() == "GIF not found" {
-			status = http.StatusNotFound
-		}
-		c.JSON(status, responses.ErrorResponse("GIPHY_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -96,7 +93,7 @@ func (h *GiphyHandler) Random(c *gin.Context) {
 	// Call Giphy service
 	result, err := h.giphyService.Random(tag, rating)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("GIPHY_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 

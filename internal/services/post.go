@@ -1,16 +1,17 @@
 package services
 
 import (
+	"errors"
 	"fmt"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"kudoboard-api/internal/config"
 	"kudoboard-api/internal/dto/requests"
+	"kudoboard-api/internal/log"
 	"kudoboard-api/internal/models"
 	"kudoboard-api/internal/services/storage"
 	"kudoboard-api/internal/utils"
-	"log"
 	"regexp"
-	"strconv"
 )
 
 // PostService handles post-related business logic
@@ -36,7 +37,8 @@ func (s *PostService) CreatePost(boardID, userID uint, input requests.CreatePost
 	// Check if board exists
 	var board models.Board
 	if result := s.db.First(&board, boardID); result.Error != nil {
-		return nil, utils.NewNotFoundError("Board not found")
+		return nil, utils.NewNotFoundError("Board not found").
+			WithField("board_id", boardID)
 	}
 
 	// Check if board is locked
@@ -74,7 +76,10 @@ func (s *PostService) CreatePost(boardID, userID uint, input requests.CreatePost
 				Role:    models.RoleContributor,
 			}
 			if err := s.db.Create(&newContributor).Error; err != nil {
-				log.Println("can not create contributor", err)
+				log.Warn("Failed to create contributor record",
+					zap.Uint("board_id", boardID),
+					zap.Uint("user_id", userID),
+					zap.Error(err))
 			}
 		}
 	}
@@ -143,7 +148,8 @@ func (s *PostService) CreatePost(boardID, userID uint, input requests.CreatePost
 func (s *PostService) GetPostByID(postID uint) (*models.Post, error) {
 	var post models.Post
 	if result := s.db.First(&post, postID); result.Error != nil {
-		return nil, utils.NewNotFoundError("Post not found")
+		return nil, utils.NewNotFoundError("Post not found").
+			WithField("post_id", postID)
 	}
 	return &post, nil
 }
@@ -153,18 +159,21 @@ func (s *PostService) UpdatePost(postID, userID uint, input requests.UpdatePostR
 	// Find post
 	var post models.Post
 	if result := s.db.First(&post, postID); result.Error != nil {
-		return nil, utils.NewNotFoundError("Post not found")
+		return nil, utils.NewNotFoundError("Post not found").
+			WithField("post_id", postID)
 	}
 
 	// Get the board to check if it's locked
 	var board models.Board
 	if result := s.db.First(&board, post.BoardID); result.Error != nil {
-		return nil, utils.NewNotFoundError("Board not found")
+		return nil, utils.NewNotFoundError("Board not found").
+			WithField("board_id", post.BoardID)
 	}
 
 	// Check if board is locked
 	if board.IsLocked {
-		return nil, utils.NewForbiddenError("This board is locked and doesn't allow modifications")
+		return nil, utils.NewForbiddenError("This board is locked and doesn't allow modifications").
+			WithField("board_Id", board.ID)
 	}
 
 	// Check if user has permission to update this post
@@ -178,7 +187,9 @@ func (s *PostService) UpdatePost(postID, userID uint, input requests.UpdatePostR
 			result := s.db.Where("board_id = ? AND user_id = ? AND role = ?",
 				post.BoardID, userID, models.RoleAdmin).First(&contributor)
 			if result.Error != nil {
-				return nil, utils.NewForbiddenError("You don't have permission to update this post")
+				return nil, utils.NewForbiddenError("You don't have permission to update this post").
+					WithField("post_id", postID).
+					WithField("user_id", userID)
 			}
 		}
 	}
@@ -196,7 +207,8 @@ func (s *PostService) UpdatePost(postID, userID uint, input requests.UpdatePostR
 			var videoID string
 			videoID, err := extractYouTubeID(*input.MediaPath)
 			if err != nil {
-				return nil, utils.NewBadRequestError(err.Error())
+				return nil, utils.NewBadRequestError(err.Error()).
+					WithField("media_path", *input.MediaPath)
 			}
 			post.MediaPath = fmt.Sprintf("https://www.youtube.com/embed/%s", videoID)
 		} else {
@@ -214,7 +226,8 @@ func (s *PostService) UpdatePost(postID, userID uint, input requests.UpdatePostR
 
 	// Save changes
 	if result := s.db.Save(&post); result.Error != nil {
-		return nil, utils.NewInternalError("Failed to update post", result.Error)
+		return nil, utils.NewInternalError("Failed to update post", result.Error).
+			WithField("post_id", post.ID)
 	}
 
 	return &post, nil
@@ -225,32 +238,44 @@ func (s *PostService) DeletePost(postID, userID uint) error {
 	// Find post
 	var post models.Post
 	if result := s.db.First(&post, postID); result.Error != nil {
-		return utils.NewNotFoundError("Post not found")
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return utils.NewNotFoundError("Post not found").
+				WithField("post_id", postID)
+		}
+		return utils.NewInternalError("Failed to query post", result.Error).
+			WithField("post_id", postID)
 	}
 
 	// Get the board to check if it's locked
 	var board models.Board
 	if result := s.db.First(&board, post.BoardID); result.Error != nil {
-		return utils.NewNotFoundError("Board not found")
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return utils.NewNotFoundError("Board not found").
+				WithField("board_id", post.BoardID)
+		}
+		return utils.NewInternalError("Failed to query board", result.Error).
+			WithField("board_id", post.BoardID)
 	}
 
 	// Check if board is locked
 	if board.IsLocked {
-		return utils.NewForbiddenError("This board is locked and doesn't allow modifications")
+		return utils.NewForbiddenError("This board is locked and doesn't allow modifications").
+			WithField("board_id", post.BoardID)
 	}
 
 	// Check if user has permission to delete this post
 	if post.AuthorID == nil || *post.AuthorID != userID {
 		// Check if user is board creator or admin
-		var board models.Board
-		s.db.First(&board, post.BoardID)
 		if board.CreatorID != userID {
 			// Check if user is a board admin
 			var contributor models.BoardContributor
 			result := s.db.Where("board_id = ? AND user_id = ? AND role = ?",
 				post.BoardID, userID, models.RoleAdmin).First(&contributor)
 			if result.Error != nil {
-				return utils.NewForbiddenError("You don't have permission to delete this post")
+				return utils.NewForbiddenError("You don't have permission to delete this post").
+					WithField("post_id", postID).
+					WithField("user_id", userID).
+					WithField("board_id", post.BoardID)
 			}
 		}
 	}
@@ -261,25 +286,37 @@ func (s *PostService) DeletePost(postID, userID uint) error {
 	// Delete likes
 	if err := tx.Where("post_id = ?", postID).Delete(&models.PostLike{}).Error; err != nil {
 		tx.Rollback()
-		return utils.NewInternalError("Failed to delete post", err)
+		return err
 	}
 
 	// Delete media for this post
+	var mediaError error
 	if post.MediaPath != "" && post.MediaSource == "internal" {
 		if err := s.storage.Delete(post.MediaPath); err != nil {
-			log.Println("can not delete media from storage", err)
+			// We'll track this error but continue with deletion
+			mediaError = err
 		}
 	}
 
 	// Delete post
 	if err := tx.Delete(&post).Error; err != nil {
 		tx.Rollback()
-		return utils.NewInternalError("Failed to delete post", err)
+		return utils.NewInternalError("Failed to delete post", err).
+			WithField("post_id", postID)
 	}
 
 	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
-		return utils.NewInternalError("Failed to delete post", err)
+		return utils.NewInternalError("Failed to commit post deletion transaction", err).
+			WithField("post_id", postID)
+	}
+
+	// If we had a media deletion error, include it in the response
+	// but still consider the deletion successful
+	if mediaError != nil {
+		return utils.NewInternalError("Post deleted but media file could not be removed", mediaError).
+			WithField("post_id", postID).
+			WithField("media_path", post.MediaPath)
 	}
 
 	return nil
@@ -290,25 +327,29 @@ func (s *PostService) LikePost(postID, userID uint) (int64, error) {
 	// Find post
 	var post models.Post
 	if result := s.db.First(&post, postID); result.Error != nil {
-		return 0, utils.NewNotFoundError("Post not found")
+		return 0, utils.NewNotFoundError("Post not found").
+			WithField("post_id", postID)
 	}
 
 	// Get the board to check if it's locked
 	var board models.Board
 	if result := s.db.First(&board, post.BoardID); result.Error != nil {
-		return 0, utils.NewNotFoundError("Board not found")
+		return 0, utils.NewNotFoundError("Board not found").
+			WithField("post_id", postID)
 	}
 
 	// Check if board is locked
 	if board.IsLocked {
-		return 0, utils.NewForbiddenError("This board is locked and doesn't allow new likes")
+		return 0, utils.NewForbiddenError("This board is locked and doesn't allow new likes").
+			WithField("post_id", postID)
 	}
 
 	// Check if user already liked the post
 	var existingLike models.PostLike
 	result := s.db.Where("post_id = ? AND user_id = ?", postID, userID).First(&existingLike)
 	if result.Error == nil {
-		return 0, utils.NewBadRequestError("You have already liked this post")
+		return 0, utils.NewBadRequestError("You have already liked this post").
+			WithField("post_id", postID)
 	}
 
 	// Create like
@@ -319,7 +360,8 @@ func (s *PostService) LikePost(postID, userID uint) (int64, error) {
 
 	// Save like
 	if result := s.db.Create(&like); result.Error != nil {
-		return 0, utils.NewInternalError("Failed to like post", result.Error)
+		return 0, utils.NewInternalError("Failed to like post", result.Error).
+			WithField("post_id", postID)
 	}
 
 	// Count total likes
@@ -334,19 +376,22 @@ func (s *PostService) UnlikePost(postID, userID uint) (int64, error) {
 	// Find post
 	var post models.Post
 	if result := s.db.First(&post, postID); result.Error != nil {
-		return 0, utils.NewNotFoundError("Post not found")
+		return 0, utils.NewNotFoundError("Post not found").
+			WithField("post_id", postID)
 	}
 
 	// Check if user has liked the post
 	var like models.PostLike
 	result := s.db.Where("post_id = ? AND user_id = ?", postID, userID).First(&like)
 	if result.Error != nil {
-		return 0, utils.NewBadRequestError("You have not liked this post")
+		return 0, utils.NewBadRequestError("You have not liked this post").
+			WithField("post_id", postID)
 	}
 
 	// Delete like
 	if result := s.db.Delete(&like); result.Error != nil {
-		return 0, utils.NewInternalError("Failed to unlike post", result.Error)
+		return 0, utils.NewInternalError("Failed to unlike post", result.Error).
+			WithField("post_id", postID)
 	}
 
 	// Count total likes
@@ -361,12 +406,14 @@ func (s *PostService) ReorderPosts(boardID, userID uint, postOrders []requests.P
 	// Find board
 	var board models.Board
 	if result := s.db.First(&board, boardID); result.Error != nil {
-		return utils.NewNotFoundError("Board not found")
+		return utils.NewNotFoundError("Board not found").
+			WithField("board_id", boardID)
 	}
 
 	// Check if board is locked
 	if board.IsLocked {
-		return utils.NewForbiddenError("This board is locked and doesn't allow reordering posts")
+		return utils.NewForbiddenError("This board is locked and doesn't allow reordering posts").
+			WithField("board_id", boardID)
 	}
 
 	// Check if user has permission to reorder posts
@@ -377,7 +424,9 @@ func (s *PostService) ReorderPosts(boardID, userID uint, postOrders []requests.P
 			boardID, userID, []models.Role{models.RoleAdmin}).
 			First(&contributor)
 		if result.Error != nil {
-			return utils.NewForbiddenError("You don't have permission to reorder posts on this board")
+			return utils.NewForbiddenError("You don't have permission to reorder posts on this board").
+				WithField("board_id", boardID).
+				WithField("user_id", userID)
 		}
 	}
 
@@ -390,19 +439,23 @@ func (s *PostService) ReorderPosts(boardID, userID uint, postOrders []requests.P
 		var post models.Post
 		if err := tx.Where("id = ? AND board_id = ?", order.ID, boardID).First(&post).Error; err != nil {
 			tx.Rollback()
-			return utils.NewBadRequestError("Post with ID " + strconv.Itoa(int(order.ID)) + " does not belong to this board")
+			return utils.NewBadRequestError("Post does not belong to this board").
+				WithField("board_id", boardID).
+				WithField("post_id", order.ID)
 		}
 
 		// Update position
 		if err := tx.Model(&post).Update("position", order.Position).Error; err != nil {
 			tx.Rollback()
-			return utils.NewInternalError("Failed to reorder posts", err)
+			return utils.NewInternalError("Failed to reorder posts", err).
+				WithField("board_id", boardID)
 		}
 	}
 
 	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
-		return utils.NewInternalError("Failed to reorder posts", err)
+		return utils.NewInternalError("Failed to reorder posts", err).
+			WithField("board_id", boardID)
 	}
 
 	return nil
@@ -434,7 +487,8 @@ func (s *PostService) GetPostsForBoard(boardID uint, page, perPage int, sortBy, 
 	// Execute query
 	var posts []models.Post
 	if result := query.Find(&posts); result.Error != nil {
-		return nil, utils.NewInternalError("Failed to fetch posts", result.Error)
+		return nil, utils.NewInternalError("Failed to fetch posts", result.Error).
+			WithField("board_id", boardID)
 	}
 
 	return posts, nil
@@ -444,7 +498,8 @@ func (s *PostService) GetPostsForBoard(boardID uint, page, perPage int, sortBy, 
 func (s *PostService) CountPostLikes(postID uint) (int64, error) {
 	var count int64
 	if result := s.db.Model(&models.PostLike{}).Where("post_id = ?", postID).Count(&count); result.Error != nil {
-		return 0, utils.NewInternalError("Failed to count likes", result.Error)
+		return 0, utils.NewInternalError("Failed to count likes", result.Error).
+			WithField("post_id", postID)
 	}
 	return count, nil
 }

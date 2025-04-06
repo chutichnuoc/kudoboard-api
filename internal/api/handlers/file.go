@@ -6,6 +6,7 @@ import (
 	"kudoboard-api/internal/dto/requests"
 	"kudoboard-api/internal/dto/responses"
 	"kudoboard-api/internal/services"
+	"kudoboard-api/internal/utils"
 	"net/http"
 )
 
@@ -41,14 +42,14 @@ func (h *FileHandler) UploadFile(c *gin.Context) {
 	// Get file from form
 	file, err := c.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_FILE", "Failed to read file"))
+		_ = c.Error(utils.NewBadRequestError("Failed to read file"))
 		return
 	}
 
 	// Upload file using service
 	fileInfo, err := h.fileService.UploadFile(file, userID, category)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("UPLOAD_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -61,7 +62,7 @@ func (h *FileHandler) DeleteFile(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
@@ -69,14 +70,14 @@ func (h *FileHandler) DeleteFile(c *gin.Context) {
 	var req requests.DeleteFileRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		_ = c.Error(utils.NewValidationError(err.Error()))
 		return
 	}
 
 	// Delete file using service
 	err := h.fileService.DeleteFile(req.FilePath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("DELETE_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 

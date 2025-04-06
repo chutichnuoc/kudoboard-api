@@ -41,14 +41,16 @@ func NewFileService(storage storage.StorageService, cfg *config.Config) *FileSer
 func (s *FileService) UploadFile(file *multipart.FileHeader, userID uint, category string) (*responses.FileInfo, error) {
 	// Validate file size (max 10MB)
 	if file.Size > 10*1024*1024 {
-		return nil, utils.NewBadRequestError("File size exceeds 10MB limit")
+		return nil, utils.NewBadRequestError("File size exceeds 10MB limit").
+			WithField("file_size", file.Size)
 	}
 
 	// Validate and set default category if needed
 	if category == "" {
 		category = CategoryDefault
 	} else if !isValidCategory(category) {
-		return nil, utils.NewBadRequestError("Invalid category. Allowed categories: image, gif, video, theme, icon, avatar, general")
+		return nil, utils.NewBadRequestError("Invalid category. Allowed categories: image, gif, video, theme, icon, avatar, general").
+			WithField("file_category", category)
 	}
 
 	fileExt := strings.ToLower(filepath.Ext(file.Filename))
@@ -62,7 +64,8 @@ func (s *FileService) UploadFile(file *multipart.FileHeader, userID uint, catego
 	case ".mp4", ".webm", ".ogg":
 		fileType = "video"
 	default:
-		return nil, utils.NewBadRequestError("Unsupported file type. Allowed types: jpg, jpeg, png, webp, gif, mp4, webm, ogg")
+		return nil, utils.NewBadRequestError("Unsupported file type. Allowed types: jpg, jpeg, png, webp, gif, mp4, webm, ogg").
+			WithField("file_ext", fileExt)
 	}
 
 	// Generate a unique directory path based on category and user
@@ -104,11 +107,16 @@ func (s *FileService) UploadFile(file *multipart.FileHeader, userID uint, catego
 
 // DeleteFile deletes a file from storage
 func (s *FileService) DeleteFile(filePath string) error {
+	if filePath == "" {
+		return utils.NewBadRequestError("File path is required")
+	}
+
 	// Delete file using storage service - pass the URL directly
 	// The storage service will handle extracting the actual path
 	err := s.storage.Delete(filePath)
 	if err != nil {
-		return utils.NewInternalError("Failed to delete file", err)
+		return utils.NewInternalError("Unable to remove the requested file", err).
+			WithField("file_path", filePath)
 	}
 
 	return nil

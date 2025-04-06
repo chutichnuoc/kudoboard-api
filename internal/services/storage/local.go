@@ -143,7 +143,8 @@ func (s *LocalStorage) Delete(fileURL string) error {
 
 	// Check if file exists before attempting to delete
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		return fmt.Errorf("file not found: %s", relativePath)
+		// Return success if file doesn't exist - idempotent deletion
+		return nil
 	}
 
 	if err := os.Remove(fullPath); err != nil {

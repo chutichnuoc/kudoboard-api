@@ -7,6 +7,7 @@ import (
 	"kudoboard-api/internal/dto/responses"
 	"kudoboard-api/internal/models"
 	"kudoboard-api/internal/services"
+	"kudoboard-api/internal/utils"
 	"net/http"
 	"strconv"
 )
@@ -34,7 +35,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 	// Get board ID from URL
 	boardID, err := strconv.ParseUint(c.Param("boardId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid board ID"))
 		return
 	}
 
@@ -45,27 +46,27 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 	// Parse request
 	var req requests.CreatePostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		_ = c.Error(utils.NewValidationError(err.Error()))
 		return
 	}
 
 	// Check if board exists
 	board, err := h.boardService.GetBoardByID(uint(boardID))
 	if err != nil {
-		c.JSON(http.StatusNotFound, responses.ErrorResponse("BOARD_NOT_FOUND", "Board not found"))
+		_ = c.Error(utils.NewNotFoundError("Board not found"))
 		return
 	}
 
 	// For anonymous users, check if board allows anonymous posts
 	if !isAuthenticated {
 		if !board.AllowAnonymous {
-			c.JSON(http.StatusForbidden, responses.ErrorResponse("ANONYMOUS_NOT_ALLOWED", "This board does not allow anonymous posts"))
+			_ = c.Error(utils.NewForbiddenError("This board does not allow anonymous posts"))
 			return
 		}
 
 		// Validate author name for anonymous posts
 		if req.AuthorName == "" {
-			c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", "Author name is required for anonymous posts"))
+			_ = c.Error(utils.NewBadRequestError("Author name is required for anonymous posts"))
 			return
 		}
 	}
@@ -73,7 +74,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 	// Create post using service
 	post, err := h.postService.CreatePost(uint(boardID), userID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("POST_CREATION_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -94,28 +95,28 @@ func (h *PostHandler) UpdatePost(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Get post ID from URL
 	postID, err := strconv.ParseUint(c.Param("postId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid post ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid post ID"))
 		return
 	}
 
 	// Parse request
 	var req requests.UpdatePostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		_ = c.Error(utils.NewValidationError(err.Error()))
 		return
 	}
 
 	// Update post using service
 	post, err := h.postService.UpdatePost(uint(postID), userID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("UPDATE_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -139,21 +140,21 @@ func (h *PostHandler) DeletePost(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Get post ID from URL
 	postID, err := strconv.ParseUint(c.Param("postId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid post ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid post ID format"))
 		return
 	}
 
 	// Delete post using service
 	err = h.postService.DeletePost(uint(postID), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("DELETE_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -165,21 +166,21 @@ func (h *PostHandler) LikePost(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Get post ID from URL
 	postID, err := strconv.ParseUint(c.Param("postId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid post ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid post ID"))
 		return
 	}
 
 	// Like post using service
 	likesCount, err := h.postService.LikePost(uint(postID), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("LIKE_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -194,21 +195,21 @@ func (h *PostHandler) UnlikePost(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Get post ID from URL
 	postID, err := strconv.ParseUint(c.Param("postId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid post ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid post ID"))
 		return
 	}
 
 	// Unlike post using service
 	likesCount, err := h.postService.UnlikePost(uint(postID), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("UNLIKE_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 
@@ -223,28 +224,28 @@ func (h *PostHandler) ReorderPosts(c *gin.Context) {
 	// Get user ID from context
 	userID := c.GetUint("userID")
 	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, responses.ErrorResponse("UNAUTHORIZED", "User not authenticated"))
+		_ = c.Error(utils.NewUnauthorizedError("User not authenticated"))
 		return
 	}
 
 	// Get board ID from URL
 	boardID, err := strconv.ParseUint(c.Param("boardId"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("INVALID_ID", "Invalid board ID"))
+		_ = c.Error(utils.NewBadRequestError("Invalid board ID"))
 		return
 	}
 
 	// Parse request
 	var req requests.ReorderPostsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, responses.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		_ = c.Error(utils.NewValidationError(err.Error()))
 		return
 	}
 
 	// Reorder posts using service
 	err = h.postService.ReorderPosts(uint(boardID), userID, req.PostPositions)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, responses.ErrorResponse("REORDER_ERROR", err.Error()))
+		_ = c.Error(err)
 		return
 	}
 

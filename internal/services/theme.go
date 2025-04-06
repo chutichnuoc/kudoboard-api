@@ -38,7 +38,8 @@ func (s *ThemeService) GetThemes() ([]models.Theme, error) {
 func (s *ThemeService) GetThemeByID(themeID uint) (*models.Theme, error) {
 	var theme models.Theme
 	if result := s.db.First(&theme, themeID); result.Error != nil {
-		return nil, utils.NewNotFoundError("Theme not found")
+		return nil, utils.NewNotFoundError("Theme not found").
+			WithField("theme_id", themeID)
 	}
 	return &theme, nil
 }
@@ -64,7 +65,8 @@ func (s *ThemeService) UpdateTheme(themeID uint, input requests.UpdateThemeReque
 	// Find theme
 	var theme models.Theme
 	if result := s.db.First(&theme, themeID); result.Error != nil {
-		return nil, utils.NewNotFoundError("Theme not found")
+		return nil, utils.NewNotFoundError("Theme not found").
+			WithField("theme_id", themeID)
 	}
 
 	// Update fields if provided
@@ -94,21 +96,25 @@ func (s *ThemeService) DeleteTheme(themeID uint) error {
 	// Check if theme is in use by any boards
 	var count int64
 	if err := s.db.Model(&models.Board{}).Where("theme_id = ?", themeID).Count(&count).Error; err != nil {
-		return utils.NewInternalError("Failed to check theme usage", err)
+		return utils.NewInternalError("Failed to check theme usage", err).
+			WithField("theme_id", themeID)
 	}
 
 	if count > 0 {
-		return utils.NewBadRequestError("Cannot delete theme as it is being used by boards")
+		return utils.NewBadRequestError("Cannot delete theme as it is being used by boards").
+			WithField("theme_id", themeID)
 	}
 
 	// Delete theme
 	result := s.db.Delete(&models.Theme{}, themeID)
 	if result.Error != nil {
-		return utils.NewInternalError("Failed to delete theme", result.Error)
+		return utils.NewInternalError("Failed to delete theme", result.Error).
+			WithField("theme_id", themeID)
 	}
 
 	if result.RowsAffected == 0 {
-		return utils.NewNotFoundError("Theme not found")
+		return utils.NewNotFoundError("Theme not found").
+			WithField("theme_id", themeID)
 	}
 
 	return nil
