@@ -14,7 +14,11 @@ type Config struct {
 	ClientURL   string
 
 	// Database
-	DatabaseURL string
+	DatabaseURL     string
+	MaxIdleConns    int
+	MaxOpenConns    int
+	ConnMaxLifeTime time.Duration
+	ConnMaxIdleTime time.Duration
 
 	// Authentication
 	JWTSecret    string
@@ -38,10 +42,12 @@ type Config struct {
 // Load returns application configuration from environment variables
 func Load() *Config {
 	// JWT expiration in hours, default to 24 if not specified
-	jwtExpiration, err := strconv.Atoi(getEnv("JWT_EXPIRES_IN", "24"))
-	if err != nil {
-		jwtExpiration = 24
-	}
+	jwtExpiration, _ := strconv.Atoi(getEnv("JWT_EXPIRES_IN", "24"))
+
+	maxIdleConn, _ := strconv.Atoi(getEnv("DB_MAX_IDLE_CONNS", "10"))
+	maxOpenConn, _ := strconv.Atoi(getEnv("DB_MAX_OPEN_CONNS", "100"))
+	connMaxLifetime, _ := strconv.Atoi(getEnv("DB_CONN_MAX_LIFETIME", "60"))
+	connMaxIdleTime, _ := strconv.Atoi(getEnv("DB_CONN_MAX_IDLE_TIME", "30"))
 
 	return &Config{
 		// Application config
@@ -50,7 +56,11 @@ func Load() *Config {
 		ClientURL:   getEnv("CLIENT_URL", "http://localhost:3000"),
 
 		// Database
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/kudoboard?sslmode=disable"),
+		DatabaseURL:     getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/kudoboard?sslmode=disable"),
+		MaxIdleConns:    maxIdleConn,
+		MaxOpenConns:    maxOpenConn,
+		ConnMaxLifeTime: time.Duration(connMaxLifetime) * time.Minute,
+		ConnMaxIdleTime: time.Duration(connMaxIdleTime) * time.Minute,
 
 		// Authentication
 		JWTSecret:    getEnv("JWT_SECRET", "your-super-secret-key-change-this-in-production"),

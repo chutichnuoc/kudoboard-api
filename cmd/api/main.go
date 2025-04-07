@@ -85,6 +85,15 @@ func main() {
 		log.Fatal("Server forced to shutdown", zap.Error(err))
 	}
 
+	log.Info("Closing database connections...")
+	if sqlDB, err := database.DB(); err == nil {
+		if err := sqlDB.Close(); err != nil {
+			log.Error("Error closing database connections", zap.Error(err))
+		} else {
+			log.Info("Database connections closed successfully")
+		}
+	}
+
 	// Flush any buffered log entries
 	log.Shutdown()
 

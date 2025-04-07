@@ -121,9 +121,10 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to get database connection: %w", err)
 	}
 
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
-	sqlDB.SetConnMaxLifetime(time.Hour)
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
+	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifeTime)
 
 	log.Info("Connected to database")
 	return db, nil
