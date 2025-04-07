@@ -13,6 +13,15 @@ type Config struct {
 	Port        string
 	ClientURL   string
 
+	// Server Timeouts
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	ReadHeaderTimeout time.Duration
+
+	// Client Timeouts
+	HTTPClientTimeout time.Duration
+
 	// Database
 	DatabaseURL     string
 	MaxIdleConns    int
@@ -41,19 +50,38 @@ type Config struct {
 
 // Load returns application configuration from environment variables
 func Load() *Config {
-	// JWT expiration in hours, default to 24 if not specified
-	jwtExpiration, _ := strconv.Atoi(getEnv("JWT_EXPIRES_IN", "24"))
+	// Parse server timeout
+	readTimeout, _ := strconv.Atoi(getEnv("SERVER_READ_TIMEOUT", "15"))
+	writeTimeout, _ := strconv.Atoi(getEnv("SERVER_WRITE_TIMEOUT", "15"))
+	idleTimeout, _ := strconv.Atoi(getEnv("SERVER_IDLE_TIMEOUT", "60"))
+	readHeaderTimeout, _ := strconv.Atoi(getEnv("SERVER_READ_HEADER_TIMEOUT", "10"))
 
+	// Parse client timeout
+	httpClientTimeout, _ := strconv.Atoi(getEnv("HTTP_CLIENT_TIMEOUT", "30"))
+
+	// Parse database connection params
 	maxIdleConn, _ := strconv.Atoi(getEnv("DB_MAX_IDLE_CONNS", "10"))
 	maxOpenConn, _ := strconv.Atoi(getEnv("DB_MAX_OPEN_CONNS", "100"))
 	connMaxLifetime, _ := strconv.Atoi(getEnv("DB_CONN_MAX_LIFETIME", "60"))
 	connMaxIdleTime, _ := strconv.Atoi(getEnv("DB_CONN_MAX_IDLE_TIME", "30"))
+
+	// Parse JWT expiration
+	jwtExpiration, _ := strconv.Atoi(getEnv("JWT_EXPIRES_IN", "24"))
 
 	return &Config{
 		// Application config
 		Environment: getEnv("APP_ENV", "development"),
 		Port:        getEnv("PORT", "8080"),
 		ClientURL:   getEnv("CLIENT_URL", "http://localhost:3000"),
+
+		// Server Timeouts
+		ReadTimeout:       time.Duration(readTimeout) * time.Second,
+		WriteTimeout:      time.Duration(writeTimeout) * time.Second,
+		IdleTimeout:       time.Duration(idleTimeout) * time.Second,
+		ReadHeaderTimeout: time.Duration(readHeaderTimeout) * time.Second,
+
+		// Client Timeout
+		HTTPClientTimeout: time.Duration(httpClientTimeout) * time.Second,
 
 		// Database
 		DatabaseURL:     getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/kudoboard?sslmode=disable"),

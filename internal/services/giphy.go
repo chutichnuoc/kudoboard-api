@@ -7,7 +7,6 @@ import (
 	"kudoboard-api/internal/utils"
 	"net/http"
 	"net/url"
-	"time"
 )
 
 const (
@@ -26,7 +25,7 @@ func NewGiphyService(cfg *config.Config) *GiphyService {
 	return &GiphyService{
 		cfg: cfg,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: cfg.HTTPClientTimeout,
 		},
 	}
 }

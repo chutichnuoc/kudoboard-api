@@ -3,7 +3,9 @@ package storage
 import (
 	"fmt"
 	"io"
+	"kudoboard-api/internal/config"
 	"mime/multipart"
+	"net/http"
 	"path/filepath"
 	"strings"
 
@@ -21,14 +23,18 @@ type S3Storage struct {
 	uploader   *s3manager.Uploader
 	downloader *s3manager.Downloader
 	s3Client   *s3.S3
+	config     *config.Config
 }
 
 // NewS3Storage creates a new S3 storage service
-func NewS3Storage(region, bucket, accessKey, secretKey string) (*S3Storage, error) {
+func NewS3Storage(region, bucket, accessKey, secretKey string, cfg *config.Config) (*S3Storage, error) {
 	// Create AWS session
 	sess, err := session.NewSession(&aws.Config{
 		Region:      aws.String(region),
 		Credentials: credentials.NewStaticCredentials(accessKey, secretKey, ""),
+		HTTPClient: &http.Client{
+			Timeout: cfg.HTTPClientTimeout,
+		},
 	})
 
 	if err != nil {

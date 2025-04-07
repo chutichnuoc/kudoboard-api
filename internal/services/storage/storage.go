@@ -52,7 +52,7 @@ func NewStorageService(cfg *config.Config) (StorageService, error) {
 	case StorageTypeLocal:
 		return NewLocalStorage(cfg.LocalBasePath), nil
 	case StorageTypeS3:
-		return NewS3Storage(cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey)
+		return NewS3Storage(cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg)
 	default:
 		// Default to local storage
 		return NewLocalStorage(cfg.LocalBasePath), nil

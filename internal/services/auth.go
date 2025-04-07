@@ -12,8 +12,9 @@ import (
 
 // AuthService handles authentication logic
 type AuthService struct {
-	db  *gorm.DB
-	cfg *config.Config
+	db         *gorm.DB
+	cfg        *config.Config
+	httpClient *http.Client
 }
 
 // NewAuthService creates a new AuthService
@@ -21,6 +22,9 @@ func NewAuthService(db *gorm.DB, cfg *config.Config) *AuthService {
 	return &AuthService{
 		db:  db,
 		cfg: cfg,
+		httpClient: &http.Client{
+			Timeout: cfg.HTTPClientTimeout,
+		},
 	}
 }
 
@@ -87,11 +91,8 @@ func (s *AuthService) LoginUser(email, password string) (*models.User, string, e
 
 // GoogleLogin handles Google OAuth login
 func (s *AuthService) GoogleLogin(accessToken string) (*models.User, string, error) {
-	// Create HTTP client
-	client := &http.Client{}
-
 	// Verify the token by calling Google's API
-	resp, err := client.Get("https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=" + accessToken)
+	resp, err := s.httpClient.Get("https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=" + accessToken)
 	if err != nil {
 		return nil, "", utils.NewInternalError("Failed to verify Google token", err)
 	}
@@ -178,13 +179,10 @@ func (s *AuthService) GoogleLogin(accessToken string) (*models.User, string, err
 
 // FacebookLogin handles Facebook OAuth login
 func (s *AuthService) FacebookLogin(accessToken string) (*models.User, string, error) {
-	// Create HTTP client
-	client := &http.Client{}
-
 	// Verify the token by calling Facebook's API to get user info
 	// We need to include fields=id,name,email to get these fields
 	fbURL := fmt.Sprintf("https://graph.facebook.com/me?fields=id,name,email,picture&access_token=%s", accessToken)
-	resp, err := client.Get(fbURL)
+	resp, err := s.httpClient.Get(fbURL)
 	if err != nil {
 		return nil, "", utils.NewInternalError("Failed to verify Facebook token", err)
 	}

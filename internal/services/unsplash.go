@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 )
 
 const (
@@ -27,7 +26,7 @@ func NewUnsplashService(cfg *config.Config) *UnsplashService {
 	return &UnsplashService{
 		cfg: cfg,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: cfg.HTTPClientTimeout,
 		},
 	}
 }
