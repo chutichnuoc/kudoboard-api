@@ -44,30 +44,29 @@ func (s *BoardService) CreateBoard(userID uint, input requests.CreateBoardReques
 		AllowAnonymous:       input.AllowAnonymous,
 	}
 
-	// Use a transaction to ensure both operations succeed or fail together
-	tx := s.db.Begin()
+	// Use transaction to ensure both operations succeed or fail together
+	err := utils.WithTransaction(s.db, func(tx *gorm.DB) error {
+		// Save board to database
+		if err := tx.Create(&board).Error; err != nil {
+			return utils.NewInternalError("Failed to create board", err)
+		}
 
-	// Save board to database
-	if result := tx.Create(&board); result.Error != nil {
-		tx.Rollback()
-		return nil, utils.NewInternalError("Failed to create board", result.Error)
-	}
+		// Add creator as admin contributor
+		contributor := models.BoardContributor{
+			BoardID: board.ID,
+			UserID:  userID,
+			Role:    models.RoleAdmin,
+		}
 
-	// Add creator as admin contributor
-	contributor := models.BoardContributor{
-		BoardID: board.ID,
-		UserID:  userID,
-		Role:    models.RoleAdmin,
-	}
+		if err := tx.Create(&contributor).Error; err != nil {
+			return utils.NewInternalError("Failed to add creator as admin", err)
+		}
 
-	if result := tx.Create(&contributor); result.Error != nil {
-		tx.Rollback()
-		return nil, utils.NewInternalError("Failed to add creator as admin", result.Error)
-	}
+		return nil
+	})
 
-	// Commit transaction
-	if err := tx.Commit().Error; err != nil {
-		return nil, utils.NewInternalError("Failed to create board", err)
+	if err != nil {
+		return nil, err
 	}
 
 	return &board, nil
@@ -197,28 +196,48 @@ func (s *BoardService) DeleteBoard(boardID, userID uint) error {
 			WithField("creator_id", board.CreatorID)
 	}
 
-	// Start a transaction
-	tx := s.db.Begin()
-
-	// Delete all associated posts likes
-	if err := tx.Exec("DELETE FROM post_likes WHERE post_id IN (SELECT id FROM posts WHERE board_id = ?)", boardID).Error; err != nil {
-		tx.Rollback()
-		return utils.NewInternalError("Failed to delete board post likes", err).
-			WithField("board_id", boardID)
-	}
-
-	// Get all media for posts on this board
+	// Get all media for posts on this board to delete after transaction
 	var posts []models.Post
-	if err := tx.Where("board_id = ?", boardID).Find(&posts).Error; err != nil {
-		tx.Rollback()
+	if err := s.db.Where("board_id = ?", boardID).Find(&posts).Error; err != nil {
 		return utils.NewInternalError("Failed to fetch board posts for media cleanup", err).
 			WithField("board_id", boardID)
 	}
 
-	// Track any media deletion errors
-	var mediaErrors []string
+	// Use transaction for all database operations
+	err := utils.WithTransaction(s.db, func(tx *gorm.DB) error {
+		// Delete all associated posts likes
+		if err := tx.Exec("DELETE FROM post_likes WHERE post_id IN (SELECT id FROM posts WHERE board_id = ?)", boardID).Error; err != nil {
+			return utils.NewInternalError("Failed to delete board post likes", err).
+				WithField("board_id", boardID)
+		}
 
-	// Delete media files for each post
+		// Delete all associated posts
+		if err := tx.Where("board_id = ?", boardID).Delete(&models.Post{}).Error; err != nil {
+			return utils.NewInternalError("Failed to delete board posts", err).
+				WithField("board_id", boardID)
+		}
+
+		// Delete all associated contributors
+		if err := tx.Where("board_id = ?", boardID).Delete(&models.BoardContributor{}).Error; err != nil {
+			return utils.NewInternalError("Failed to delete board contributors", err).
+				WithField("board_id", boardID)
+		}
+
+		// Delete the board
+		if err := tx.Delete(&board).Error; err != nil {
+			return utils.NewInternalError("Failed to delete board", err).
+				WithField("board_id", boardID)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	// Now handle media deletion outside the transaction
+	var mediaErrors []string
 	for _, post := range posts {
 		if post.MediaPath != "" && post.MediaSource == "internal" {
 			if err := s.storage.Delete(post.MediaPath); err != nil {
@@ -226,33 +245,6 @@ func (s *BoardService) DeleteBoard(boardID, userID uint) error {
 				mediaErrors = append(mediaErrors, fmt.Sprintf("Media %s: %s", post.MediaPath, err.Error()))
 			}
 		}
-	}
-
-	// Delete all associated posts
-	if err := tx.Where("board_id = ?", boardID).Delete(&models.Post{}).Error; err != nil {
-		tx.Rollback()
-		return utils.NewInternalError("Failed to delete board posts", err).
-			WithField("board_id", boardID)
-	}
-
-	// Delete all associated contributors
-	if err := tx.Where("board_id = ?", boardID).Delete(&models.BoardContributor{}).Error; err != nil {
-		tx.Rollback()
-		return utils.NewInternalError("Failed to delete board contributors", err).
-			WithField("board_id", boardID)
-	}
-
-	// Delete the board
-	if err := tx.Delete(&board).Error; err != nil {
-		tx.Rollback()
-		return utils.NewInternalError("Failed to delete board", err).
-			WithField("board_id", boardID)
-	}
-
-	// Commit the transaction
-	if err := tx.Commit().Error; err != nil {
-		return utils.NewInternalError("Failed to commit board deletion transaction", err).
-			WithField("board_id", boardID)
 	}
 
 	// If we had media deletion errors, include them in the response

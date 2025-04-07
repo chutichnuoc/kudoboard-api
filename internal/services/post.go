@@ -54,7 +54,7 @@ func (s *PostService) CreatePost(boardID, userID uint, input requests.CreatePost
 		return nil, utils.NewForbiddenError("This board does not allow anonymous posts")
 	}
 
-	// For authenticated users, check access and add as contributor if needed
+	// For authenticated users, check access
 	if !isAnonymous {
 		// Check if user has access to the board
 		canAccess, err := s.boardService.CanAccessBoard(boardID, userID)
@@ -63,24 +63,6 @@ func (s *PostService) CreatePost(boardID, userID uint, input requests.CreatePost
 		}
 		if !canAccess {
 			return nil, utils.NewForbiddenError("You don't have access to this board")
-		}
-
-		// Check if user is already a contributor
-		var contributor models.BoardContributor
-		result := s.db.Where("board_id = ? AND user_id = ?", boardID, userID).First(&contributor)
-		if result.Error != nil {
-			// User is not a contributor yet, create a contributor record
-			newContributor := models.BoardContributor{
-				BoardID: boardID,
-				UserID:  userID,
-				Role:    models.RoleContributor,
-			}
-			if err := s.db.Create(&newContributor).Error; err != nil {
-				log.Warn("Failed to create contributor record",
-					zap.Uint("board_id", boardID),
-					zap.Uint("user_id", userID),
-					zap.Error(err))
-			}
 		}
 	}
 
@@ -104,7 +86,7 @@ func (s *PostService) CreatePost(boardID, userID uint, input requests.CreatePost
 		MediaSource:     input.MediaSource,
 		BackgroundColor: input.BackgroundColor,
 		TextColor:       input.TextColor,
-		Position:        0,
+		Position:        0, // Will be updated in the transaction
 	}
 
 	// Set author details based on authentication status
@@ -120,25 +102,60 @@ func (s *PostService) CreatePost(boardID, userID uint, input requests.CreatePost
 		post.AuthorName = user.Name
 	}
 
-	// Save the post first to get an ID
-	if result := s.db.Create(&post); result.Error != nil {
-		return nil, utils.NewInternalError("Failed to create post", result.Error)
+	// Save post and update position in a transaction
+	err := utils.WithTransaction(s.db, func(tx *gorm.DB) error {
+		// Save the post first to get an ID
+		if result := tx.Create(&post).Error; result != nil {
+			return utils.NewInternalError("Failed to create post", result)
+		}
+
+		// Now update the position using a direct SQL query with atomic increment
+		// This ensures each post gets a unique position even with concurrent requests
+		updateResult := tx.Exec(`
+			UPDATE posts 
+			SET position = (
+				SELECT COALESCE(MAX(position), 0) + 1 
+				FROM posts 
+				WHERE board_id = ? AND id != ?
+			)
+			WHERE id = ?
+		`, boardID, post.ID, post.ID)
+
+		if updateResult.Error != nil {
+			return utils.NewInternalError("Failed to update post position", updateResult.Error)
+		}
+
+		// If authenticated and not already a contributor, add as contributor
+		if !isAnonymous {
+			var contributor models.BoardContributor
+			result := tx.Where("board_id = ? AND user_id = ?", boardID, userID).First(&contributor)
+			if result.Error != nil {
+				// User is not a contributor yet, create a contributor record
+				newContributor := models.BoardContributor{
+					BoardID: boardID,
+					UserID:  userID,
+					Role:    models.RoleContributor,
+				}
+				if err := tx.Create(&newContributor).Error; err != nil {
+					log.Warn("Failed to create contributor record",
+						zap.Uint("board_id", boardID),
+						zap.Uint("user_id", userID),
+						zap.Error(err))
+					// Continue without failing the transaction
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
-	// Now update the position using a direct SQL query with atomic increment
-	// This ensures each post gets a unique position even with concurrent requests
-	updateResult := s.db.Exec(`
-        UPDATE posts 
-        SET position = (
-            SELECT COALESCE(MAX(position), 0) + 1 
-            FROM posts 
-            WHERE board_id = ? AND id != ?
-        )
-        WHERE id = ?
-    `, boardID, post.ID, post.ID)
-
-	if updateResult.Error != nil {
-		return nil, utils.NewInternalError("Failed to update post position", updateResult.Error)
+	// Reload the post to get the updated position
+	if err := s.db.First(&post, post.ID).Error; err != nil {
+		return nil, utils.NewInternalError("Failed to reload post", err)
 	}
 
 	return &post, nil
@@ -280,35 +297,37 @@ func (s *PostService) DeletePost(postID, userID uint) error {
 		}
 	}
 
-	// Start a transaction
-	tx := s.db.Begin()
+	// Store media path for deletion after transaction
+	mediaPath := post.MediaPath
+	mediaSource := post.MediaSource
 
-	// Delete likes
-	if err := tx.Where("post_id = ?", postID).Delete(&models.PostLike{}).Error; err != nil {
-		tx.Rollback()
+	// Delete the post and its likes in a transaction
+	err := utils.WithTransaction(s.db, func(tx *gorm.DB) error {
+		// Delete likes
+		if err := tx.Where("post_id = ?", postID).Delete(&models.PostLike{}).Error; err != nil {
+			return utils.NewInternalError("Failed to delete post likes", err).
+				WithField("post_id", postID)
+		}
+
+		// Delete post
+		if err := tx.Delete(&post).Error; err != nil {
+			return utils.NewInternalError("Failed to delete post", err).
+				WithField("post_id", postID)
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		return err
 	}
 
-	// Delete media for this post
+	// Delete media for this post outside the transaction
 	var mediaError error
-	if post.MediaPath != "" && post.MediaSource == "internal" {
-		if err := s.storage.Delete(post.MediaPath); err != nil {
-			// We'll track this error but continue with deletion
+	if mediaPath != "" && mediaSource == "internal" {
+		if err := s.storage.Delete(mediaPath); err != nil {
 			mediaError = err
 		}
-	}
-
-	// Delete post
-	if err := tx.Delete(&post).Error; err != nil {
-		tx.Rollback()
-		return utils.NewInternalError("Failed to delete post", err).
-			WithField("post_id", postID)
-	}
-
-	// Commit transaction
-	if err := tx.Commit().Error; err != nil {
-		return utils.NewInternalError("Failed to commit post deletion transaction", err).
-			WithField("post_id", postID)
 	}
 
 	// If we had a media deletion error, include it in the response
@@ -316,7 +335,7 @@ func (s *PostService) DeletePost(postID, userID uint) error {
 	if mediaError != nil {
 		return utils.NewInternalError("Post deleted but media file could not be removed", mediaError).
 			WithField("post_id", postID).
-			WithField("media_path", post.MediaPath)
+			WithField("media_path", mediaPath)
 	}
 
 	return nil
