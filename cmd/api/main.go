@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"kudoboard-api/internal/api/middleware"
 	"kudoboard-api/internal/api/routes"
 	"kudoboard-api/internal/config"
 	"kudoboard-api/internal/container"
@@ -53,8 +54,11 @@ func main() {
 	// Create Gin router
 	router := gin.New()
 
+	// Create rate limiter middleware for later shutdown
+	rateLimiter := middleware.NewRateLimiterMiddleware(cfg)
+
 	// Setup routes with the container
-	routes.Setup(router, cfg, serviceContainer)
+	routes.Setup(router, cfg, serviceContainer, rateLimiter)
 
 	// Create HTTP server
 	server := &http.Server{
@@ -88,6 +92,10 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		log.Fatal("Server forced to shutdown", zap.Error(err))
 	}
+
+	// Shutdown rate limiter cleanup goroutine
+	log.Info("Shutting down rate limiter...")
+	rateLimiter.Shutdown()
 
 	log.Info("Closing database connections...")
 	if sqlDB, err := database.DB(); err == nil {

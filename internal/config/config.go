@@ -33,6 +33,12 @@ type Config struct {
 	JWTSecret    string
 	JWTExpiresIn time.Duration
 
+	// Rate Limiting
+	RateLimitRequests     float64 // Requests per second for general endpoints
+	RateLimitBurst        int     // Maximum burst size for general endpoints
+	AuthRateLimitRequests float64 // Requests per second for auth endpoints
+	AuthRateLimitBurst    int     // Maximum burst size for auth endpoints
+
 	// Storage
 	StorageType   string // "local" or "s3"
 	LocalBasePath string
@@ -68,6 +74,12 @@ func Load() *Config {
 	// Parse JWT expiration
 	jwtExpiration, _ := strconv.Atoi(getEnv("JWT_EXPIRES_IN", "24"))
 
+	// Parse rate limiting configuration
+	rateLimitRequests, _ := strconv.ParseFloat(getEnv("RATE_LIMIT_REQUESTS", "10"), 64)
+	rateLimitBurst, _ := strconv.Atoi(getEnv("RATE_LIMIT_BURST", "20"))
+	authRateLimitRequests, _ := strconv.ParseFloat(getEnv("AUTH_RATE_LIMIT_REQUESTS", "5"), 64)
+	authRateLimitBurst, _ := strconv.Atoi(getEnv("AUTH_RATE_LIMIT_BURST", "10"))
+
 	return &Config{
 		// Application config
 		Environment: getEnv("APP_ENV", "development"),
@@ -93,6 +105,12 @@ func Load() *Config {
 		// Authentication
 		JWTSecret:    getEnv("JWT_SECRET", "your-super-secret-key-change-this-in-production"),
 		JWTExpiresIn: time.Duration(jwtExpiration) * time.Hour,
+
+		// Rate Limiting
+		RateLimitRequests:     rateLimitRequests,
+		RateLimitBurst:        rateLimitBurst,
+		AuthRateLimitRequests: authRateLimitRequests,
+		AuthRateLimitBurst:    authRateLimitBurst,
 
 		// Storage
 		StorageType:   getEnv("STORAGE_TYPE", "local"),

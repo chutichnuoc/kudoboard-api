@@ -13,6 +13,7 @@ func Setup(
 	router *gin.Engine,
 	cfg *config.Config,
 	container *container.Container,
+	rateLimiter *middleware.RateLimiterMiddleware,
 ) {
 	// Create error middleware with debug mode based on environment
 	errorMiddleware := middleware.NewErrorMiddleware(cfg.Environment != "production")
@@ -22,6 +23,7 @@ func Setup(
 	router.Use(middleware.LoggingMiddleware())
 	router.Use(errorMiddleware.ErrorHandler())
 	router.Use(middleware.CorsMiddleware(cfg))
+	router.Use(rateLimiter.RateLimit())
 
 	// Create handler instances with services from container
 	authHandler := handlers.NewAuthHandler(container.AuthService, cfg)
