@@ -6,7 +6,6 @@ import (
 	"kudoboard-api/internal/api/middleware"
 	"kudoboard-api/internal/config"
 	"kudoboard-api/internal/container"
-	"net/http"
 )
 
 // Setup configures all API routes
@@ -24,22 +23,6 @@ func Setup(
 	router.Use(errorMiddleware.ErrorHandler())
 	router.Use(middleware.CorsMiddleware(cfg))
 
-	// Serve uploaded files in development mode
-	if cfg.Environment != "production" && cfg.StorageType == "local" {
-		router.Static("/uploads", cfg.LocalBasePath)
-	}
-
-	// Health check route
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-		})
-	})
-
-	// 404 and 405 handlers
-	router.NoRoute(errorMiddleware.NotFoundHandler)
-	router.NoMethod(errorMiddleware.MethodNotAllowedHandler)
-
 	// Create handler instances with services from container
 	authHandler := handlers.NewAuthHandler(container.AuthService, cfg)
 	boardHandler := handlers.NewBoardHandler(container.BoardService, container.PostService, container.ThemeService, container.AuthService, cfg)
@@ -48,11 +31,28 @@ func Setup(
 	fileHandler := handlers.NewFileHandler(container.FileService, cfg)
 	giphyHandler := handlers.NewGiphyHandler(container.GiphyService, cfg)
 	unsplashHandler := handlers.NewUnsplashHandler(container.UnsplashService, cfg)
+	healthHandler := handlers.NewHealthHandler(container.DB, cfg)
 
 	authMiddleware := middleware.NewAuthMiddleware(container.AuthService, cfg)
 
+	// Serve uploaded files in development mode
+	if cfg.Environment != "production" && cfg.StorageType == "local" {
+		router.Static("/uploads", cfg.LocalBasePath)
+	}
+
+	api := router.Group("/api")
+
+	// Health check routes
+	api.GET("/health", healthHandler.LivenessCheck)                // Basic liveness probe
+	api.GET("/health/readiness", healthHandler.ReadinessCheck)     // Readiness probe
+	api.GET("/health/detailed", healthHandler.DetailedHealthCheck) // Detailed health check
+
+	// 404 and 405 handlers
+	router.NoRoute(errorMiddleware.NotFoundHandler)
+	router.NoMethod(errorMiddleware.MethodNotAllowedHandler)
+
 	// API v1 routes
-	v1 := router.Group("/api/v1")
+	v1 := api.Group("/v1")
 
 	// Auth routes
 	auth := v1.Group("/auth")
