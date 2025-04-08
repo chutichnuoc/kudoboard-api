@@ -1,9 +1,11 @@
 package services
 
 import (
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"kudoboard-api/internal/config"
 	"kudoboard-api/internal/dto/requests"
+	"kudoboard-api/internal/log"
 	"kudoboard-api/internal/models"
 	"kudoboard-api/internal/services/storage"
 	"kudoboard-api/internal/utils"
@@ -69,6 +71,9 @@ func (s *ThemeService) UpdateTheme(themeID uint, input requests.UpdateThemeReque
 			WithField("theme_id", themeID)
 	}
 
+	oldIconUrl := theme.IconUrl
+	oldBackgroundImageUrl := theme.BackgroundImageURL
+
 	// Update fields if provided
 	if input.Category != nil {
 		theme.Category = *input.Category
@@ -86,6 +91,24 @@ func (s *ThemeService) UpdateTheme(themeID uint, input requests.UpdateThemeReque
 	// Save changes
 	if result := s.db.Save(&theme); result.Error != nil {
 		return nil, utils.NewInternalError("Failed to update theme", result.Error)
+	}
+
+	if oldIconUrl != "" && oldIconUrl != theme.IconUrl {
+		if err := s.storage.Delete(oldIconUrl); err != nil {
+			log.Warn("Failed to delete old icon",
+				zap.Uint("theme_id", themeID),
+				zap.String("file_path", oldIconUrl),
+				zap.Error(err))
+		}
+	}
+
+	if oldBackgroundImageUrl != "" && oldBackgroundImageUrl != theme.BackgroundImageURL {
+		if err := s.storage.Delete(oldBackgroundImageUrl); err != nil {
+			log.Warn("Failed to delete old background image",
+				zap.Uint("theme_id", themeID),
+				zap.String("file_path", oldBackgroundImageUrl),
+				zap.Error(err))
+		}
 	}
 
 	return &theme, nil

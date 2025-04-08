@@ -3,9 +3,12 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"kudoboard-api/internal/config"
+	"kudoboard-api/internal/log"
 	"kudoboard-api/internal/models"
+	"kudoboard-api/internal/services/storage"
 	"kudoboard-api/internal/utils"
 	"net/http"
 )
@@ -13,15 +16,17 @@ import (
 // AuthService handles authentication logic
 type AuthService struct {
 	db         *gorm.DB
+	storage    storage.StorageService
 	cfg        *config.Config
 	httpClient *http.Client
 }
 
 // NewAuthService creates a new AuthService
-func NewAuthService(db *gorm.DB, cfg *config.Config) *AuthService {
+func NewAuthService(db *gorm.DB, storage storage.StorageService, cfg *config.Config) *AuthService {
 	return &AuthService{
-		db:  db,
-		cfg: cfg,
+		db:      db,
+		storage: storage,
+		cfg:     cfg,
 		httpClient: &http.Client{
 			Timeout: cfg.HTTPClientTimeout,
 		},
@@ -290,6 +295,8 @@ func (s *AuthService) UpdateUser(userID uint, name, profilePicture string) (*mod
 		return nil, utils.NewNotFoundError("User not found")
 	}
 
+	oldProfilePicture := user.ProfilePicture
+
 	// Update fields if provided
 	if name != "" {
 		user.Name = name
@@ -302,6 +309,15 @@ func (s *AuthService) UpdateUser(userID uint, name, profilePicture string) (*mod
 	if result := s.db.Save(&user); result.Error != nil {
 		return nil, utils.NewInternalError("Failed to update user", result.Error).
 			WithField("user_id", userID)
+	}
+
+	if oldProfilePicture != "" && oldProfilePicture != user.ProfilePicture {
+		if err := s.storage.Delete(oldProfilePicture); err != nil {
+			log.Warn("Failed to delete old profile picture",
+				zap.Uint("user_id", userID),
+				zap.String("file_path", oldProfilePicture),
+				zap.Error(err))
+		}
 	}
 
 	return &user, nil

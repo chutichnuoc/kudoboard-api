@@ -211,6 +211,9 @@ func (s *PostService) UpdatePost(postID, userID uint, input requests.UpdatePostR
 		}
 	}
 
+	oldMediaPath := post.MediaPath
+	oldMediaSource := post.MediaSource
+
 	// Update fields if provided
 	if input.Content != nil {
 		post.Content = *input.Content
@@ -245,6 +248,15 @@ func (s *PostService) UpdatePost(postID, userID uint, input requests.UpdatePostR
 	if result := s.db.Save(&post); result.Error != nil {
 		return nil, utils.NewInternalError("Failed to update post", result.Error).
 			WithField("post_id", post.ID)
+	}
+
+	if oldMediaPath != "" && oldMediaPath != post.MediaPath && oldMediaSource == "internal" {
+		if err := s.storage.Delete(oldMediaPath); err != nil {
+			log.Warn("Failed to delete old media",
+				zap.Uint("post_id", postID),
+				zap.String("file_path", oldMediaPath),
+				zap.Error(err))
+		}
 	}
 
 	return &post, nil
@@ -322,20 +334,13 @@ func (s *PostService) DeletePost(postID, userID uint) error {
 		return err
 	}
 
-	// Delete media for this post outside the transaction
-	var mediaError error
 	if mediaPath != "" && mediaSource == "internal" {
 		if err := s.storage.Delete(mediaPath); err != nil {
-			mediaError = err
+			log.Warn("Failed to delete media",
+				zap.Uint("post_id", postID),
+				zap.String("file_path", mediaPath),
+				zap.Error(err))
 		}
-	}
-
-	// If we had a media deletion error, include it in the response
-	// but still consider the deletion successful
-	if mediaError != nil {
-		return utils.NewInternalError("Post deleted but media file could not be removed", mediaError).
-			WithField("post_id", postID).
-			WithField("media_path", mediaPath)
 	}
 
 	return nil

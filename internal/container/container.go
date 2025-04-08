@@ -38,7 +38,7 @@ func NewContainer(cfg *config.Config, db *gorm.DB) (*Container, error) {
 	container.StorageService = storageService
 
 	// Initialize services in the correct order (respect dependencies)
-	container.AuthService = services.NewAuthService(db, cfg)
+	container.AuthService = services.NewAuthService(db, storageService, cfg)
 	container.BoardService = services.NewBoardService(db, storageService, cfg)
 	container.ThemeService = services.NewThemeService(db, storageService, cfg)
 	container.FileService = services.NewFileService(storageService, cfg)

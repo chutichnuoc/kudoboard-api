@@ -2,10 +2,11 @@ package services
 
 import (
 	"errors"
-	"fmt"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"kudoboard-api/internal/config"
 	"kudoboard-api/internal/dto/requests"
+	"kudoboard-api/internal/log"
 	"kudoboard-api/internal/models"
 	"kudoboard-api/internal/services/storage"
 	"kudoboard-api/internal/utils"
@@ -236,24 +237,15 @@ func (s *BoardService) DeleteBoard(boardID, userID uint) error {
 		return err
 	}
 
-	// Now handle media deletion outside the transaction
-	var mediaErrors []string
 	for _, post := range posts {
 		if post.MediaPath != "" && post.MediaSource == "internal" {
 			if err := s.storage.Delete(post.MediaPath); err != nil {
-				// Continue attempting to delete other files, but track the error
-				mediaErrors = append(mediaErrors, fmt.Sprintf("Media %s: %s", post.MediaPath, err.Error()))
+				log.Warn("Failed to delete media",
+					zap.Uint("post_id", post.ID),
+					zap.String("file_path", post.MediaPath),
+					zap.Error(err))
 			}
 		}
-	}
-
-	// If we had media deletion errors, include them in the response
-	// but still consider the deletion successful
-	if len(mediaErrors) > 0 {
-		return utils.NewInternalError("Board deleted but some media files could not be removed",
-			fmt.Errorf("media deletion errors: %v", mediaErrors)).
-			WithField("board_id", boardID).
-			WithField("media_errors", mediaErrors)
 	}
 
 	return nil
