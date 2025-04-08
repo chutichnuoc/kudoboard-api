@@ -1,242 +1,202 @@
-# KudoBoard API Documentation
+# Kudoboard API Documentation
 
 ## Overview
 
-The KudoBoard API provides a comprehensive set of endpoints for creating and managing collaborative message boards where users can post messages, upload media, and customize the appearance. This document outlines all available API endpoints, request and response formats, authentication requirements, and expected behaviors.
+This documentation covers the Kudoboard API, which powers a platform for creating collaborative appreciation boards where users can post messages, share media, and interact with others' content.
 
-## Base URL
-
-```
-https://api.kudoboard.com/api/v1
-```
-
-For local development:
-
-```
-http://localhost:8080/api/v1
-```
+**Base URL**: `/api/v1`
 
 ## Authentication
 
-Most endpoints require authentication using JWT tokens. Include the token in the Authorization header as a Bearer token:
+### Authentication Methods
+
+The API uses JWT (JSON Web Token) authentication. Include the token in the `Authorization` header:
 
 ```
-Authorization: Bearer <your_token>
+Authorization: Bearer {token}
 ```
 
-## Response Format
+Certain endpoints allow anonymous access (noted in the documentation).
 
-All API responses follow a standard format:
+### Endpoints
 
-### Success Response
+#### Register a New User
 
-```json
-{
-  "success": true,
-  "data": { ... },
-  "pagination": { ... } // Optional, included for paginated endpoints
-}
 ```
-
-### Error Response
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable error message"
-  }
-}
+POST /auth/register
 ```
-
-## Common Error Codes
-
-- `VALIDATION_ERROR`: Invalid request parameters
-- `UNAUTHORIZED`: Authentication required
-- `FORBIDDEN`: Insufficient permissions
-- `NOT_FOUND`: Resource not found
-- `INTERNAL_SERVER_ERROR`: Server-side error
-
-## Pagination
-
-Paginated endpoints include pagination information in the response:
-
-```json
-"pagination": {
-  "total": 100,
-  "page": 2,
-  "per_page": 10,
-  "total_pages": 10
-}
-```
-
-Request pagination parameters:
-
-- `page`: Page number (default: 1)
-- `per_page`: Items per page (default: 10, max: 100)
-
----
-
-# Endpoints
-
-## Authentication
-
-### Register
 
 Create a new user account.
 
-- **URL**: `/auth/register`
-- **Method**: `POST`
-- **Auth required**: No
-
-**Request Body**:
-
+**Request Body:**
 ```json
 {
-  "name": "User Name",
-  "email": "user@example.com",
-  "password": "password123"
+  "name": "string",
+  "email": "string",
+  "password": "string"
 }
 ```
 
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
   "data": {
-    "token": "jwt_token_here",
+    "token": "string",
     "user": {
-      "id": 1,
-      "name": "User Name",
-      "email": "user@example.com",
-      "profile_picture": "",
+      "id": 0,
+      "name": "string",
+      "email": "string",
+      "profile_picture": "string",
       "is_verified": false,
-      "auth_provider": "local",
+      "auth_provider": "string",
       "created_at": "2023-01-01T00:00:00Z"
     }
   }
 }
 ```
 
-### Login
+#### Login
 
-Authenticate with email and password.
+```
+POST /auth/login
+```
 
-- **URL**: `/auth/login`
-- **Method**: `POST`
-- **Auth required**: No
+Authenticate a user with email and password.
 
-**Request Body**:
-
+**Request Body:**
 ```json
 {
-  "email": "user@example.com",
-  "password": "password123"
+  "email": "string",
+  "password": "string"
 }
 ```
 
-**Response**: Same as Register response
-
-### Google Login
-
-Authenticate with Google OAuth.
-
-- **URL**: `/auth/google`
-- **Method**: `POST`
-- **Auth required**: No
-
-**Request Body**:
-
-```json
-{
-  "access_token": "google_access_token"
-}
-```
-
-**Response**: Same as Register response
-
-### Facebook Login
-
-Authenticate with Facebook OAuth.
-
-- **URL**: `/auth/facebook`
-- **Method**: `POST`
-- **Auth required**: No
-
-**Request Body**:
-
-```json
-{
-  "access_token": "facebook_access_token"
-}
-```
-
-**Response**: Same as Register response
-
-### Get Current User
-
-Get the currently authenticated user's information.
-
-- **URL**: `/auth/me`
-- **Method**: `GET`
-- **Auth required**: Yes
-
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
   "data": {
-    "id": 1,
-    "name": "User Name",
-    "email": "user@example.com",
-    "profile_picture": "https://example.com/avatar.jpg",
-    "is_verified": true,
-    "auth_provider": "google",
+    "token": "string",
+    "user": {
+      "id": 0,
+      "name": "string",
+      "email": "string",
+      "profile_picture": "string",
+      "is_verified": false,
+      "auth_provider": "string",
+      "created_at": "2023-01-01T00:00:00Z"
+    }
+  }
+}
+```
+
+#### Google Login
+
+```
+POST /auth/google
+```
+
+Authenticate a user with Google OAuth.
+
+**Request Body:**
+```json
+{
+  "access_token": "string"
+}
+```
+
+**Response:** Same as the login endpoint.
+
+#### Facebook Login
+
+```
+POST /auth/facebook
+```
+
+Authenticate a user with Facebook OAuth.
+
+**Request Body:**
+```json
+{
+  "access_token": "string"
+}
+```
+
+**Response:** Same as the login endpoint.
+
+#### Get Current User
+
+```
+GET /auth/me
+```
+
+Get the authenticated user's profile.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 0,
+    "name": "string",
+    "email": "string",
+    "profile_picture": "string",
+    "is_verified": false,
+    "auth_provider": "string",
     "created_at": "2023-01-01T00:00:00Z"
   }
 }
 ```
 
-### Update Profile
+#### Update User Profile
 
-Update the current user's profile information.
+```
+PUT /auth/me
+```
 
-- **URL**: `/auth/me`
-- **Method**: `PUT`
-- **Auth required**: Yes
+Update the user's profile.
 
-**Request Body**:
-
+**Request Body:**
 ```json
 {
-  "name": "Updated Name",
-  "profile_picture": "https://example.com/new-avatar.jpg"
+  "name": "string",
+  "profile_picture": "string"
 }
 ```
 
-**Response**: Updated user object (same format as Get Current User)
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 0,
+    "name": "string",
+    "email": "string",
+    "profile_picture": "string",
+    "is_verified": false,
+    "auth_provider": "string",
+    "created_at": "2023-01-01T00:00:00Z"
+  }
+}
+```
 
-### Forgot Password
+#### Forgot Password
+
+```
+POST /auth/forgot-password
+```
 
 Initiate the password reset process.
 
-- **URL**: `/auth/forgot-password`
-- **Method**: `POST`
-- **Auth required**: No
-
-**Request Body**:
-
+**Request Body:**
 ```json
 {
-  "email": "user@example.com"
+  "email": "string"
 }
 ```
 
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
@@ -246,25 +206,23 @@ Initiate the password reset process.
 }
 ```
 
-### Reset Password
+#### Reset Password
 
-Reset password using token from email.
+```
+POST /auth/reset-password
+```
 
-- **URL**: `/auth/reset-password`
-- **Method**: `POST`
-- **Auth required**: No
+Reset a user's password using a reset token.
 
-**Request Body**:
-
+**Request Body:**
 ```json
 {
-  "token": "reset_token_from_email",
-  "password": "new_password"
+  "token": "string",
+  "password": "string"
 }
 ```
 
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
@@ -276,67 +234,69 @@ Reset password using token from email.
 
 ## Boards
 
-### Create Board
+### Endpoints
 
-Create a new KudoBoard.
+#### Create a Board
 
-- **URL**: `/boards`
-- **Method**: `POST`
-- **Auth required**: Yes
+```
+POST /boards
+```
 
-**Request Body**:
+Create a new board.
 
+**Authorization:** Required
+
+**Request Body:**
 ```json
 {
-  "title": "Happy Birthday John!",
-  "receiver_name": "John Doe",
-  "font_name": "Arial",
-  "font_size": 16,
-  "header_color": "#4285F4",
-  "theme_id": 1,
-  "effect": "{\"type\":\"confetti\",\"enabled\":true}",
-  "enable_intro_animation": true,
+  "title": "string",
+  "receiver_name": "string",
+  "font_name": "string",
+  "font_size": 0,
+  "header_color": "string",
+  "theme_id": 0,
+  "effect": "string",
+  "enable_intro_animation": false,
   "is_private": false,
-  "allow_anonymous": true
+  "allow_anonymous": false
 }
 ```
 
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
   "data": {
-    "id": 1,
-    "title": "Happy Birthday John!",
-    "receiver_name": "John Doe",
-    "slug": "abcdef123456789",
-    "max_post": 10,
+    "id": 0,
+    "title": "string",
+    "receiver_name": "string",
+    "slug": "string",
+    "max_post": 0,
     "creator": {
-      "id": 1,
-      "name": "User Name",
-      "email": "user@example.com",
-      "profile_picture": "",
-      "is_verified": true,
-      "auth_provider": "local",
+      "id": 0,
+      "name": "string",
+      "email": "string",
+      "profile_picture": "string",
+      "is_verified": false,
+      "auth_provider": "string",
       "created_at": "2023-01-01T00:00:00Z"
     },
-    "font_name": "Arial",
-    "font_size": 16,
-    "header_color": "#4285F4",
-    "show_header_color": true,
+    "font_name": "string",
+    "font_size": 0,
+    "header_color": "string",
+    "show_header_color": false,
     "theme": {
-      "id": 1,
-      "category": "birthday",
-      "name": "Birthday Theme",
-      "icon_url": "https://example.com/icons/birthday.png",
-      "background_image_url": "https://example.com/backgrounds/birthday.jpg"
+      "id": 0,
+      "category": "string",
+      "name": "string",
+      "icon_url": "string",
+      "background_image_url": "string"
     },
-    "effect": "{\"type\":\"confetti\",\"enabled\":true}",
-    "enable_intro_animation": true,
+    "effect": "string",
+    "enable_intro_animation": false,
     "is_private": false,
     "is_locked": false,
-    "allow_anonymous": true,
+    "allow_anonymous": false,
     "created_at": "2023-01-01T00:00:00Z",
     "updated_at": "2023-01-01T00:00:00Z",
     "post_count": 0
@@ -344,138 +304,148 @@ Create a new KudoBoard.
 }
 ```
 
-### List User Boards
+#### List User Boards
 
-Get all boards created by or accessible to the current user.
+```
+GET /boards
+```
 
-- **URL**: `/boards`
-- **Method**: `GET`
-- **Auth required**: Yes
-- **Query Parameters**:
-    - `page` (optional): Page number for pagination
-    - `per_page` (optional): Items per page
-    - `search` (optional): Search term for board title or receiver name
-    - `sort_by` (optional): Field to sort by (`created_at` or `title`)
-    - `order` (optional): Sort order (`asc` or `desc`)
+List all boards where the user is an owner or contributor.
 
-**Response**:
+**Authorization:** Required
 
+**Query Parameters:**
+- `page`: Page number (default: 1)
+- `per_page`: Items per page (default: 10)
+- `search`: Search term
+- `sort_by`: Field to sort by (`created_at` or `title`)
+- `order`: Sort order (`asc` or `desc`)
+
+**Response:**
 ```json
 {
   "success": true,
   "data": [
     {
-      "id": 1,
-      "title": "Happy Birthday John!",
-      "receiver_name": "John Doe",
-      "slug": "abcdef123456789",
-      "max_post": 10,
+      "id": 0,
+      "title": "string",
+      "receiver_name": "string",
+      "slug": "string",
+      "max_post": 0,
       "creator": {
-        "id": 1,
-        "name": "User Name",
-        "email": "user@example.com",
-        "profile_picture": "",
-        "is_verified": true,
-        "auth_provider": "local",
+        "id": 0,
+        "name": "string",
+        "email": "string",
+        "profile_picture": "string",
+        "is_verified": false,
+        "auth_provider": "string",
         "created_at": "2023-01-01T00:00:00Z"
       },
-      "font_name": "Arial",
-      "font_size": 16,
-      "header_color": "#4285F4",
-      "show_header_color": true,
-      "effect": "{\"type\":\"confetti\",\"enabled\":true}",
-      "enable_intro_animation": true,
+      "font_name": "string",
+      "font_size": 0,
+      "header_color": "string",
+      "show_header_color": false,
+      "theme": {
+        "id": 0,
+        "category": "string",
+        "name": "string",
+        "icon_url": "string",
+        "background_image_url": "string"
+      },
+      "effect": "string",
+      "enable_intro_animation": false,
       "is_private": false,
       "is_locked": false,
-      "allow_anonymous": true,
+      "allow_anonymous": false,
       "created_at": "2023-01-01T00:00:00Z",
       "updated_at": "2023-01-01T00:00:00Z",
       "post_count": 0,
-      "is_owner": true,
+      "is_owner": false,
       "is_favorite": false,
       "is_archived": false
     }
   ],
   "pagination": {
-    "total": 1,
-    "page": 1,
-    "per_page": 10,
-    "total_pages": 1
+    "total": 0,
+    "page": 0,
+    "per_page": 0,
+    "total_pages": 0
   }
 }
 ```
 
-### Get Board by Slug
+#### Get Board by Slug
+
+```
+GET /boards/slug/:slug
+```
 
 Get a board by its unique slug.
 
-- **URL**: `/boards/slug/:slug`
-- **Method**: `GET`
-- **Auth required**: Optional (required for private boards)
+**Authorization:** Optional
 
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
   "data": {
     "board": {
-      "id": 1,
-      "title": "Happy Birthday John!",
-      "receiver_name": "John Doe",
-      "slug": "abcdef123456789",
-      "max_post": 10,
+      "id": 0,
+      "title": "string",
+      "receiver_name": "string",
+      "slug": "string",
+      "max_post": 0,
       "creator": {
-        "id": 1,
-        "name": "User Name",
-        "email": "user@example.com",
-        "profile_picture": "",
-        "is_verified": true,
-        "auth_provider": "local",
+        "id": 0,
+        "name": "string",
+        "email": "string",
+        "profile_picture": "string",
+        "is_verified": false,
+        "auth_provider": "string",
         "created_at": "2023-01-01T00:00:00Z"
       },
-      "font_name": "Arial",
-      "font_size": 16,
-      "header_color": "#4285F4",
-      "show_header_color": true,
+      "font_name": "string",
+      "font_size": 0,
+      "header_color": "string",
+      "show_header_color": false,
       "theme": {
-        "id": 1,
-        "category": "birthday",
-        "name": "Birthday Theme",
-        "icon_url": "https://example.com/icons/birthday.png",
-        "background_image_url": "https://example.com/backgrounds/birthday.jpg"
+        "id": 0,
+        "category": "string",
+        "name": "string",
+        "icon_url": "string",
+        "background_image_url": "string"
       },
-      "effect": "{\"type\":\"confetti\",\"enabled\":true}",
-      "enable_intro_animation": true,
+      "effect": "string",
+      "enable_intro_animation": false,
       "is_private": false,
       "is_locked": false,
-      "allow_anonymous": true,
+      "allow_anonymous": false,
       "created_at": "2023-01-01T00:00:00Z",
       "updated_at": "2023-01-01T00:00:00Z",
-      "post_count": 1
+      "post_count": 0
     },
     "posts": [
       {
-        "id": 1,
-        "board_id": 1,
+        "id": 0,
+        "board_id": 0,
         "author": {
-          "id": 2,
-          "name": "Contributor",
-          "email": "contributor@example.com",
-          "profile_picture": "",
-          "is_verified": true,
-          "auth_provider": "local",
+          "id": 0,
+          "name": "string",
+          "email": "string",
+          "profile_picture": "string",
+          "is_verified": false,
+          "auth_provider": "string",
           "created_at": "2023-01-01T00:00:00Z"
         },
-        "author_name": "Contributor",
-        "content": "Happy birthday! Have a great day!",
-        "background_color": "#ffffff",
-        "text_color": "#000000",
+        "author_name": "string",
+        "content": "string",
+        "background_color": "string",
+        "text_color": "string",
         "position": 0,
-        "media_path": "https://example.com/uploads/image/birthday-cake.jpg",
-        "media_type": "image",
-        "media_source": "internal",
-        "likes_count": 2,
+        "media_path": "string",
+        "media_type": "string",
+        "media_source": "string",
+        "likes_count": 0,
         "created_at": "2023-01-01T00:00:00Z",
         "updated_at": "2023-01-01T00:00:00Z"
       }
@@ -484,46 +454,86 @@ Get a board by its unique slug.
 }
 ```
 
-### Update Board
+#### Update Board
 
-Update a board's details.
+```
+PUT /boards/:boardId
+```
 
-- **URL**: `/boards/:boardId`
-- **Method**: `PUT`
-- **Auth required**: Yes (must be board creator)
+Update a board.
 
-**Request Body**:
+**Authorization:** Required
 
+**Request Body:**
 ```json
 {
-  "title": "Updated Board Title",
-  "receiver_name": "Updated Name",
-  "font_name": "Helvetica",
-  "font_size": 18,
-  "header_color": "#FF5722",
-  "show_header_color": true,
-  "theme_id": 2,
-  "effect": "{\"type\":\"hearts\",\"enabled\":true}",
+  "title": "string",
+  "receiver_name": "string",
+  "font_name": "string",
+  "font_size": 0,
+  "header_color": "string",
+  "show_header_color": false,
+  "theme_id": 0,
+  "effect": "string",
   "enable_intro_animation": false,
-  "is_private": true,
+  "is_private": false,
   "allow_anonymous": false
 }
 ```
 
-Note: All fields are optional. Only include fields you want to update.
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 0,
+    "title": "string",
+    "receiver_name": "string",
+    "slug": "string",
+    "max_post": 0,
+    "creator": {
+      "id": 0,
+      "name": "string",
+      "email": "string",
+      "profile_picture": "string",
+      "is_verified": false,
+      "auth_provider": "string",
+      "created_at": "2023-01-01T00:00:00Z"
+    },
+    "font_name": "string",
+    "font_size": 0,
+    "header_color": "string",
+    "show_header_color": false,
+    "theme": {
+      "id": 0,
+      "category": "string",
+      "name": "string",
+      "icon_url": "string",
+      "background_image_url": "string"
+    },
+    "effect": "string",
+    "enable_intro_animation": false,
+    "is_private": false,
+    "is_locked": false,
+    "allow_anonymous": false,
+    "created_at": "2023-01-01T00:00:00Z",
+    "updated_at": "2023-01-01T00:00:00Z",
+    "post_count": 0
+  }
+}
+```
 
-**Response**: Updated board object (same format as Create Board)
+#### Delete Board
 
-### Delete Board
+```
+DELETE /boards/:boardId
+```
 
 Delete a board.
 
-- **URL**: `/boards/:boardId`
-- **Method**: `DELETE`
-- **Auth required**: Yes (must be board creator)
+**Authorization:** Required
 
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
@@ -533,34 +543,76 @@ Delete a board.
 }
 ```
 
-### Toggle Board Lock
+#### Toggle Board Lock
 
-Lock or unlock a board to prevent new posts or modifications.
+```
+PATCH /boards/:boardId/lock
+```
 
-- **URL**: `/boards/:boardId/lock`
-- **Method**: `PATCH`
-- **Auth required**: Yes (must be board creator or admin)
+Lock or unlock a board.
 
-**Request Body**:
+**Authorization:** Required
 
+**Request Body:**
 ```json
 {
   "is_locked": true
 }
 ```
 
-**Response**: Updated board object (same format as Create Board)
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 0,
+    "title": "string",
+    "receiver_name": "string",
+    "slug": "string",
+    "max_post": 0,
+    "creator": {
+      "id": 0,
+      "name": "string",
+      "email": "string",
+      "profile_picture": "string",
+      "is_verified": false,
+      "auth_provider": "string",
+      "created_at": "2023-01-01T00:00:00Z"
+    },
+    "font_name": "string",
+    "font_size": 0,
+    "header_color": "string",
+    "show_header_color": false,
+    "theme": {
+      "id": 0,
+      "category": "string",
+      "name": "string",
+      "icon_url": "string",
+      "background_image_url": "string"
+    },
+    "effect": "string",
+    "enable_intro_animation": false,
+    "is_private": false,
+    "is_locked": true,
+    "allow_anonymous": false,
+    "created_at": "2023-01-01T00:00:00Z",
+    "updated_at": "2023-01-01T00:00:00Z",
+    "post_count": 0
+  }
+}
+```
 
-### Update Board Preferences
+#### Update Board Preferences
 
-Update user-specific preferences for a board (favorite/archived status).
+```
+PATCH /boards/:boardId/preferences
+```
 
-- **URL**: `/boards/:boardId/preferences`
-- **Method**: `PATCH`
-- **Auth required**: Yes (must have access to the board)
+Update a user's preferences for a board.
 
-**Request Body**:
+**Authorization:** Required
 
+**Request Body:**
 ```json
 {
   "is_favorite": true,
@@ -568,10 +620,7 @@ Update user-specific preferences for a board (favorite/archived status).
 }
 ```
 
-Note: Both fields are optional. Only include fields you want to update.
-
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
@@ -581,119 +630,127 @@ Note: Both fields are optional. Only include fields you want to update.
 }
 ```
 
-### List Board Contributors
+#### List Board Contributors
+
+```
+GET /boards/:boardId/contributors
+```
 
 List all contributors for a board.
 
-- **URL**: `/boards/:boardId/contributors`
-- **Method**: `GET`
-- **Auth required**: Yes (must have access to the board)
+**Authorization:** Required
 
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
   "data": [
     {
-      "board_id": 1,
+      "board_id": 0,
       "user": {
-        "id": 1,
-        "name": "User Name",
-        "email": "user@example.com",
-        "profile_picture": "",
-        "is_verified": true,
-        "auth_provider": "local",
+        "id": 0,
+        "name": "string",
+        "email": "string",
+        "profile_picture": "string",
+        "is_verified": false,
+        "auth_provider": "string",
         "created_at": "2023-01-01T00:00:00Z"
       },
-      "role": "admin",
-      "created_at": "2023-01-01T00:00:00Z"
-    },
-    {
-      "board_id": 1,
-      "user": {
-        "id": 2,
-        "name": "Contributor",
-        "email": "contributor@example.com",
-        "profile_picture": "",
-        "is_verified": true,
-        "auth_provider": "local",
-        "created_at": "2023-01-01T00:00:00Z"
-      },
-      "role": "contributor",
+      "role": "viewer|contributor|admin",
       "created_at": "2023-01-01T00:00:00Z"
     }
   ]
 }
 ```
 
-### Add Contributor
+#### Add Contributor
 
-Add a new contributor to a board.
+```
+POST /boards/:boardId/contributors
+```
 
-- **URL**: `/boards/:boardId/contributors`
-- **Method**: `POST`
-- **Auth required**: Yes (must be board creator)
+Add a contributor to a board.
 
-**Request Body**:
+**Authorization:** Required
 
+**Request Body:**
 ```json
 {
-  "email": "contributor@example.com",
-  "role": "contributor" // "viewer", "contributor", or "admin"
+  "email": "string",
+  "role": "viewer|contributor|admin"
 }
 ```
 
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
   "data": {
-    "board_id": 1,
+    "board_id": 0,
     "user": {
-      "id": 2,
-      "name": "Contributor",
-      "email": "contributor@example.com",
-      "profile_picture": "",
-      "is_verified": true,
-      "auth_provider": "local",
+      "id": 0,
+      "name": "string",
+      "email": "string",
+      "profile_picture": "string",
+      "is_verified": false,
+      "auth_provider": "string",
       "created_at": "2023-01-01T00:00:00Z"
     },
-    "role": "contributor",
+    "role": "viewer|contributor|admin",
     "created_at": "2023-01-01T00:00:00Z"
   }
 }
 ```
 
-### Update Contributor
+#### Update Contributor
+
+```
+PUT /boards/:boardId/contributors/:contributorId
+```
 
 Update a contributor's role.
 
-- **URL**: `/boards/:boardId/contributors/:contributorId`
-- **Method**: `PUT`
-- **Auth required**: Yes (must be board creator)
+**Authorization:** Required
 
-**Request Body**:
-
+**Request Body:**
 ```json
 {
-  "role": "admin" // "viewer", "contributor", or "admin"
+  "role": "viewer|contributor|admin"
 }
 ```
 
-**Response**: Updated contributor object (same format as Add Contributor)
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "board_id": 0,
+    "user": {
+      "id": 0,
+      "name": "string",
+      "email": "string",
+      "profile_picture": "string",
+      "is_verified": false,
+      "auth_provider": "string",
+      "created_at": "2023-01-01T00:00:00Z"
+    },
+    "role": "viewer|contributor|admin",
+    "created_at": "2023-01-01T00:00:00Z"
+  }
+}
+```
 
-### Remove Contributor
+#### Remove Contributor
+
+```
+DELETE /boards/:boardId/contributors/:contributorId
+```
 
 Remove a contributor from a board.
 
-- **URL**: `/boards/:boardId/contributors/:contributorId`
-- **Method**: `DELETE`
-- **Auth required**: Yes (must be board creator)
+**Authorization:** Required
 
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
@@ -703,178 +760,29 @@ Remove a contributor from a board.
 }
 ```
 
-## Posts
+#### Reorder Posts
 
-### Create Post
-
-Create a new post on a board.
-
-- **URL**: `/boards/:boardId/posts`
-- **Method**: `POST`
-- **Auth required**: Optional (anonymous posts allowed if board settings permit)
-
-**Request Body**:
-
-```json
-{
-  "content": "Happy birthday! Have a great day!",
-  "author_name": "Anonymous", // Required for anonymous posts
-  "background_color": "#ffffff",
-  "text_color": "#000000",
-  "media_path": "https://example.com/uploads/image/birthday-cake.jpg",
-  "media_type": "image", // "image", "gif", "video", "youtube"
-  "media_source": "internal" // "internal" or "external"
-}
 ```
-
-**Response**:
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "board_id": 1,
-    "author": {
-      "id": 2,
-      "name": "Contributor",
-      "email": "contributor@example.com",
-      "profile_picture": "",
-      "is_verified": true,
-      "auth_provider": "local",
-      "created_at": "2023-01-01T00:00:00Z"
-    },
-    "author_name": "Contributor",
-    "content": "Happy birthday! Have a great day!",
-    "background_color": "#ffffff",
-    "text_color": "#000000",
-    "position": 0,
-    "media_path": "https://example.com/uploads/image/birthday-cake.jpg",
-    "media_type": "image",
-    "media_source": "internal",
-    "likes_count": 0,
-    "created_at": "2023-01-01T00:00:00Z",
-    "updated_at": "2023-01-01T00:00:00Z"
-  }
-}
+PUT /boards/:boardId/posts/reorder
 ```
-
-### Update Post
-
-Update an existing post.
-
-- **URL**: `/posts/:postId`
-- **Method**: `PUT`
-- **Auth required**: Yes (must be post author, board creator, or board admin)
-
-**Request Body**:
-
-```json
-{
-  "content": "Updated content",
-  "author_name": "Updated Name",
-  "background_color": "#f0f0f0",
-  "text_color": "#333333",
-  "media_path": "https://example.com/uploads/image/new-image.jpg",
-  "media_type": "image",
-  "media_source": "internal"
-}
-```
-
-Note: All fields are optional. Only include fields you want to update.
-
-**Response**: Updated post object (same format as Create Post)
-
-### Delete Post
-
-Delete a post.
-
-- **URL**: `/posts/:postId`
-- **Method**: `DELETE`
-- **Auth required**: Yes (must be post author, board creator, or board admin)
-
-**Response**:
-
-```json
-{
-  "success": true,
-  "data": {
-    "message": "Post deleted successfully"
-  }
-}
-```
-
-### Like Post
-
-Add a like to a post.
-
-- **URL**: `/posts/:postId/like`
-- **Method**: `POST`
-- **Auth required**: Yes
-
-**Response**:
-
-```json
-{
-  "success": true,
-  "data": {
-    "message": "Post liked successfully",
-    "likes_count": 3
-  }
-}
-```
-
-### Unlike Post
-
-Remove a like from a post.
-
-- **URL**: `/posts/:postId/like`
-- **Method**: `DELETE`
-- **Auth required**: Yes
-
-**Response**:
-
-```json
-{
-  "success": true,
-  "data": {
-    "message": "Post unliked successfully",
-    "likes_count": 2
-  }
-}
-```
-
-### Reorder Posts
 
 Update the order of posts on a board.
 
-- **URL**: `/boards/:boardId/posts/reorder`
-- **Method**: `PUT`
-- **Auth required**: Yes (must be board creator or admin)
+**Authorization:** Required
 
-**Request Body**:
-
+**Request Body:**
 ```json
 {
   "post_positions": [
     {
-      "id": 1,
-      "position": 2
-    },
-    {
-      "id": 2,
-      "position": 1
-    },
-    {
-      "id": 3,
-      "position": 3
+      "id": 0,
+      "position": 0
     }
   ]
 }
 ```
 
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
@@ -884,117 +792,313 @@ Update the order of posts on a board.
 }
 ```
 
+## Posts
+
+### Endpoints
+
+#### Create Post
+
+```
+POST /boards/:boardId/posts
+```
+
+Create a new post on a board.
+
+**Authorization:** Optional (anonymous allowed if board settings permit)
+
+**Request Body:**
+```json
+{
+  "content": "string",
+  "author_name": "string",
+  "background_color": "string",
+  "text_color": "string",
+  "media_path": "string",
+  "media_type": "string",
+  "media_source": "internal|external"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 0,
+    "board_id": 0,
+    "author": {
+      "id": 0,
+      "name": "string",
+      "email": "string",
+      "profile_picture": "string",
+      "is_verified": false,
+      "auth_provider": "string",
+      "created_at": "2023-01-01T00:00:00Z"
+    },
+    "author_name": "string",
+    "content": "string",
+    "background_color": "string",
+    "text_color": "string",
+    "position": 0,
+    "media_path": "string",
+    "media_type": "string",
+    "media_source": "string",
+    "likes_count": 0,
+    "created_at": "2023-01-01T00:00:00Z",
+    "updated_at": "2023-01-01T00:00:00Z"
+  }
+}
+```
+
+#### Update Post
+
+```
+PUT /posts/:postId
+```
+
+Update a post.
+
+**Authorization:** Required
+
+**Request Body:**
+```json
+{
+  "content": "string",
+  "author_name": "string",
+  "background_color": "string",
+  "text_color": "string",
+  "media_path": "string",
+  "media_type": "string",
+  "media_source": "internal|external"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 0,
+    "board_id": 0,
+    "author": {
+      "id": 0,
+      "name": "string",
+      "email": "string",
+      "profile_picture": "string",
+      "is_verified": false,
+      "auth_provider": "string",
+      "created_at": "2023-01-01T00:00:00Z"
+    },
+    "author_name": "string",
+    "content": "string",
+    "background_color": "string",
+    "text_color": "string",
+    "position": 0,
+    "media_path": "string",
+    "media_type": "string",
+    "media_source": "string",
+    "likes_count": 0,
+    "created_at": "2023-01-01T00:00:00Z",
+    "updated_at": "2023-01-01T00:00:00Z"
+  }
+}
+```
+
+#### Delete Post
+
+```
+DELETE /posts/:postId
+```
+
+Delete a post.
+
+**Authorization:** Required
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Post deleted successfully"
+  }
+}
+```
+
+#### Like Post
+
+```
+POST /posts/:postId/like
+```
+
+Add a like to a post.
+
+**Authorization:** Required
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Post liked successfully",
+    "likes_count": 0
+  }
+}
+```
+
+#### Unlike Post
+
+```
+DELETE /posts/:postId/like
+```
+
+Remove a like from a post.
+
+**Authorization:** Required
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Post unliked successfully",
+    "likes_count": 0
+  }
+}
+```
+
 ## Themes
 
-### List Themes
+### Endpoints
 
-Get all available themes.
+#### List Themes
 
-- **URL**: `/themes`
-- **Method**: `GET`
-- **Auth required**: No
+```
+GET /themes
+```
 
-**Response**:
+List all available themes.
 
+**Authorization:** None
+
+**Response:**
 ```json
 {
   "success": true,
   "data": [
     {
-      "id": 1,
-      "category": "birthday",
-      "name": "Birthday Theme",
-      "icon_url": "https://example.com/icons/birthday.png",
-      "background_image_url": "https://example.com/backgrounds/birthday.jpg"
-    },
-    {
-      "id": 2,
-      "category": "congratulations",
-      "name": "Congratulations Theme",
-      "icon_url": "https://example.com/icons/congrats.png",
-      "background_image_url": "https://example.com/backgrounds/congrats.jpg"
+      "id": 0,
+      "category": "string",
+      "name": "string",
+      "icon_url": "string",
+      "background_image_url": "string"
     }
   ]
 }
 ```
 
-### Get Theme
+#### Get Theme
+
+```
+GET /themes/:themeId
+```
 
 Get a theme by ID.
 
-- **URL**: `/themes/:themeId`
-- **Method**: `GET`
-- **Auth required**: No
+**Authorization:** None
 
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
   "data": {
-    "id": 1,
-    "category": "birthday",
-    "name": "Birthday Theme",
-    "icon_url": "https://example.com/icons/birthday.png",
-    "background_image_url": "https://example.com/backgrounds/birthday.jpg"
+    "id": 0,
+    "category": "string",
+    "name": "string",
+    "icon_url": "string",
+    "background_image_url": "string"
   }
 }
 ```
 
-### Create Theme (Admin Only)
+#### Create Theme (Admin Only)
+
+```
+POST /themes
+```
 
 Create a new theme.
 
-- **URL**: `/themes`
-- **Method**: `POST`
-- **Auth required**: Yes (admin only)
+**Authorization:** Admin Only
 
-**Request Body**:
-
+**Request Body:**
 ```json
 {
-  "category": "farewell",
-  "name": "Farewell Theme",
-  "icon_url": "https://example.com/icons/farewell.png",
-  "background_image_url": "https://example.com/backgrounds/farewell.jpg"
+  "category": "string",
+  "name": "string",
+  "icon_url": "string",
+  "background_image_url": "string"
 }
 ```
 
-**Response**: Created theme object (same format as Get Theme)
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 0,
+    "category": "string",
+    "name": "string",
+    "icon_url": "string",
+    "background_image_url": "string"
+  }
+}
+```
 
-### Update Theme (Admin Only)
+#### Update Theme (Admin Only)
+
+```
+PUT /themes/:themeId
+```
 
 Update an existing theme.
 
-- **URL**: `/themes/:themeId`
-- **Method**: `PUT`
-- **Auth required**: Yes (admin only)
+**Authorization:** Admin Only
 
-**Request Body**:
-
+**Request Body:**
 ```json
 {
-  "category": "updated_category",
-  "name": "Updated Theme Name",
-  "icon_url": "https://example.com/icons/updated.png",
-  "background_image_url": "https://example.com/backgrounds/updated.jpg"
+  "category": "string",
+  "name": "string",
+  "icon_url": "string",
+  "background_image_url": "string"
 }
 ```
 
-Note: All fields are optional. Only include fields you want to update.
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 0,
+    "category": "string",
+    "name": "string",
+    "icon_url": "string",
+    "background_image_url": "string"
+  }
+}
+```
 
-**Response**: Updated theme object (same format as Get Theme)
+#### Delete Theme (Admin Only)
 
-### Delete Theme (Admin Only)
+```
+DELETE /themes/:themeId
+```
 
 Delete a theme.
 
-- **URL**: `/themes/:themeId`
-- **Method**: `DELETE`
-- **Auth required**: Yes (admin only)
+**Authorization:** Admin Only
 
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
@@ -1006,54 +1110,57 @@ Delete a theme.
 
 ## Files
 
-### Upload File
+### Endpoints
 
-Upload a file (image, GIF, or video).
+#### Upload File
 
-- **URL**: `/files/upload`
-- **Method**: `POST`
-- **Auth required**: Optional
-- **Content-Type**: `multipart/form-data`
+```
+POST /files/upload
+```
 
-**Request Body**:
+Upload a file.
 
-- `file`: The file to upload (required)
-- `category`: Category of the file (optional, default: "general")
+**Authorization:** Optional
 
-**Response**:
+**Content-Type:** multipart/form-data
 
+**Form Data:**
+- `file`: The file to upload
+- `category`: File category (optional, default: "general")
+
+**Response:**
 ```json
 {
   "success": true,
   "data": {
-    "file_name": "image-20230101123456-abcdef.jpg",
-    "file_path": "/uploads/image/user_1/image-20230101123456-abcdef.jpg",
-    "file_type": "image",
-    "file_size": 102400,
-    "content_type": "image/jpeg",
-    "uploaded_at": "2023-01-01T12:34:56Z"
+    "file_name": "string",
+    "file_path": "string",
+    "file_type": "string",
+    "file_size": 0,
+    "content_type": "string",
+    "uploaded_at": "2023-01-01T00:00:00Z"
   }
 }
 ```
 
-### Delete File
+#### Delete File
+
+```
+DELETE /files
+```
 
 Delete a file.
 
-- **URL**: `/files`
-- **Method**: `DELETE`
-- **Auth required**: Yes
+**Authorization:** Required
 
-**Request Body**:
-
+**Request Body:**
 ```json
 {
-  "file_path": "/uploads/image/user_1/image-20230101123456-abcdef.jpg"
+  "file_path": "string"
 }
 ```
 
-**Response**:
-
+**Response:**
 ```json
 {
   "success": true,
@@ -1063,55 +1170,321 @@ Delete a file.
 }
 ```
 
-## Misc
+#### Clean Orphaned Files (Admin Only)
 
-### Health Check
+```
+POST /files/cleanup-orphaned
+```
 
-Check API health status.
+Trigger a cleanup of orphaned files.
 
-- **URL**: `/health`
-- **Method**: `GET`
-- **Auth required**: No
+**Authorization:** Admin Only
 
-**Response**:
-
+**Response:**
 ```json
 {
-  "status": "ok"
+  "success": true,
+  "data": {
+    "message": "Orphaned file cleanup job started successfully"
+  }
 }
 ```
 
-## Role-Based Access Control
+## Giphy Integration
 
-The API enforces different access levels for board contributors:
+### Endpoints
 
-1. **Viewer**: Can only view a board and its posts
-2. **Contributor**: Can view the board and add posts
-3. **Admin**: Can view, add posts, modify board settings, and manage contributors
-4. **Creator**: Full control over the board (same as admin plus the ability to delete the board)
+#### Search GIFs
 
-## Errors
+```
+GET /giphy/search
+```
 
-If an error occurs, the API will return an appropriate HTTP status code and a standardized error response:
+Search for GIFs.
+
+**Authorization:** None
+
+**Query Parameters:**
+- `q`: Search query (required)
+- `limit`: Maximum number of results (default: 25)
+- `offset`: Results offset (default: 0)
+- `rating`: Content rating filter
+- `lang`: Language filter
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "data": [],
+    "pagination": {},
+    "meta": {}
+  }
+}
+```
+
+#### Trending GIFs
+
+```
+GET /giphy/trending
+```
+
+Get trending GIFs.
+
+**Authorization:** None
+
+**Query Parameters:**
+- `limit`: Maximum number of results (default: 25)
+- `offset`: Results offset (default: 0)
+- `rating`: Content rating filter
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "data": [],
+    "pagination": {},
+    "meta": {}
+  }
+}
+```
+
+#### Get GIF by ID
+
+```
+GET /giphy/:gifId
+```
+
+Get a specific GIF by ID.
+
+**Authorization:** None
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "data": {},
+    "meta": {}
+  }
+}
+```
+
+#### Random GIF
+
+```
+GET /giphy/random
+```
+
+Get a random GIF.
+
+**Authorization:** None
+
+**Query Parameters:**
+- `tag`: Tag to limit results to
+- `rating`: Content rating filter
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "data": {},
+    "meta": {}
+  }
+}
+```
+
+## Unsplash Integration
+
+### Endpoints
+
+#### Search Photos
+
+```
+GET /unsplash/search
+```
+
+Search for photos.
+
+**Authorization:** None
+
+**Query Parameters:**
+- `query`: Search query (required)
+- `page`: Page number (default: 1)
+- `per_page`: Results per page (default: 10)
+- `order_by`: Order results by (default: "relevant")
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "total": 0,
+    "total_pages": 0,
+    "results": []
+  }
+}
+```
+
+#### Random Photos
+
+```
+GET /unsplash/random
+```
+
+Get random photos.
+
+**Authorization:** None
+
+**Query Parameters:**
+- `count`: Number of photos (default: 1, max: 30)
+- `query`: Filter results by search term
+- `topics`: Filter by topics
+- `username`: Filter by username
+- `collections`: Filter by collections
+- `featured`: Featured photos only (default: false)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "results": []
+  }
+}
+```
+
+#### Get Photo by ID
+
+```
+GET /unsplash/:photoId
+```
+
+Get a specific photo by ID.
+
+**Authorization:** None
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {}
+}
+```
+
+## Health Check
+
+### Endpoints
+
+#### Liveness Check
+
+```
+GET /health
+```
+
+Basic liveness probe.
+
+**Authorization:** None
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "status": "UP",
+    "version": "string",
+    "environment": "string",
+    "timestamp": "2023-01-01T00:00:00Z",
+    "uptime": "string"
+  }
+}
+```
+
+#### Readiness Check
+
+```
+GET /health/readiness
+```
+
+Readiness probe.
+
+**Authorization:** None
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "status": "UP",
+    "version": "string",
+    "environment": "string",
+    "timestamp": "2023-01-01T00:00:00Z",
+    "components": {
+      "database": "UP",
+      "storage": "UP",
+      "giphy": "CONFIGURED",
+      "unsplash": "CONFIGURED"
+    },
+    "uptime": "string"
+  }
+}
+```
+
+#### Detailed Health Check
+
+```
+GET /health/detailed
+```
+
+Comprehensive health check.
+
+**Authorization:** None
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "status": "UP",
+    "version": "string",
+    "environment": "string",
+    "timestamp": "2023-01-01T00:00:00Z",
+    "components": {
+      "database": "UP",
+      "database_open_connections": "string",
+      "database_in_use": "string",
+      "database_idle": "string"
+    },
+    "uptime": "string"
+  }
+}
+```
+
+## Error Handling
+
+All API endpoints return a standardized error response format:
 
 ```json
 {
   "success": false,
   "error": {
     "code": "ERROR_CODE",
-    "message": "Human-readable error message"
+    "message": "Human-readable error message",
+    "details": "Additional error details (only in development mode)"
   }
 }
 ```
 
-Common HTTP status codes:
+### Common Error Codes
 
-- `400 Bad Request`: Invalid request parameters
-- `401 Unauthorized`: Authentication required
-- `403 Forbidden`: Insufficient permissions
-- `404 Not Found`: Resource not found
-- `500 Internal Server Error`: Server error
-
-## Rate Limiting
-
-The API enforces rate limits to prevent abuse. When rate limited, the API will return a `429 Too Many Requests` response.
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `NOT_FOUND` | 404 | Resource not found |
+| `UNAUTHORIZED` | 401 | Authentication required or invalid |
+| `FORBIDDEN` | 403 | User lacks permission for the action |
+| `BAD_REQUEST` | 400 | Invalid request parameters |
+| `VALIDATION_ERROR` | 400 | Request validation failed |
+| `INTERNAL_ERROR` | 500 | Server error |
+| `RATE_LIMIT_EXCEEDED` | 429 | Too many requests |
