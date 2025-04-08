@@ -490,10 +490,6 @@ func (s *PostService) GetPostsForBoard(boardID uint, page, perPage int, sortBy, 
 	// Build query
 	query := s.db.Model(&models.Post{}).Where("board_id = ?", boardID)
 
-	// Count total posts
-	//var total int64
-	//query.Count(&total)
-
 	// Add pagination
 	offset := (page - 1) * perPage
 	query = query.Offset(offset).Limit(perPage)
@@ -516,6 +512,18 @@ func (s *PostService) GetPostsForBoard(boardID uint, page, perPage int, sortBy, 
 	}
 
 	return posts, nil
+}
+
+// CountPostsInBoard count all posts for a board
+func (s *PostService) CountPostsInBoard(boardID uint) int64 {
+	// Build query
+	query := s.db.Model(&models.Post{}).Where("board_id = ?", boardID)
+
+	// Count total posts
+	var total int64
+	query.Count(&total)
+
+	return total
 }
 
 // CountPostLikes counts the number of likes for a post

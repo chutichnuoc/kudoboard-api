@@ -25,7 +25,7 @@ type BoardResponse struct {
 	AllowAnonymous       bool           `json:"allow_anonymous"`
 	CreatedAt            time.Time      `json:"created_at"`
 	UpdatedAt            time.Time      `json:"updated_at"`
-	PostCount            int            `json:"post_count"`
+	PostCount            int64          `json:"post_count"`
 }
 
 // BoardResponseWithRelation extends BoardResponse with user relationship info
@@ -54,7 +54,7 @@ type BoardContributorResponse struct {
 }
 
 // NewBoardResponse creates a new board response from a board model
-func NewBoardResponse(board *models.Board, creator *models.User, postCount int) BoardResponse {
+func NewBoardResponse(board *models.Board, creator *models.User, postCount int64) BoardResponse {
 	response := BoardResponse{
 		ID:                   board.ID,
 		Title:                board.Title,
@@ -83,7 +83,7 @@ func NewBoardResponse(board *models.Board, creator *models.User, postCount int) 
 }
 
 // NewBoardResponseWithRelation creates a new board response with relation info
-func NewBoardResponseWithRelation(board *models.Board, creator *models.User, postCount int, isOwner, isFavorite, isArchived bool) BoardResponseWithRelation {
+func NewBoardResponseWithRelation(board *models.Board, creator *models.User, postCount int64, isOwner, isFavorite, isArchived bool) BoardResponseWithRelation {
 	return BoardResponseWithRelation{
 		BoardResponse: NewBoardResponse(board, creator, postCount),
 		IsOwner:       isOwner,

@@ -97,13 +97,13 @@ func (h *BoardHandler) ListUserBoards(c *gin.Context) {
 	// Build response
 	boardResponses := make([]responses.BoardResponseWithRelation, len(boardsWithInfo))
 	for i, boardInfo := range boardsWithInfo {
-		posts, _ := h.postService.GetPostsForBoard(boardInfo.ID, 1, 0, "", "") // 0 for PerPage means all posts
+		postCount := h.postService.CountPostsInBoard(boardInfo.ID)
 
 		// Create response
 		boardResponses[i] = responses.NewBoardResponseWithRelation(
 			&boardInfo.Board,
 			&boardInfo.Creator,
-			len(posts),
+			postCount,
 			boardInfo.IsOwner,
 			boardInfo.IsFavorite,
 			boardInfo.IsArchived,
@@ -150,7 +150,7 @@ func (h *BoardHandler) GetBoardBySlug(c *gin.Context) {
 	}
 
 	// Create board response
-	boardResponse := responses.NewBoardResponse(board, creator, len(posts))
+	boardResponse := responses.NewBoardResponse(board, creator, int64(len(posts)))
 
 	// If board has a theme, include it
 	if board.ThemeID != nil {
@@ -220,10 +220,10 @@ func (h *BoardHandler) UpdateBoard(c *gin.Context) {
 	user, _ := c.Get("user")
 
 	// Count posts
-	posts, _ := h.postService.GetPostsForBoard(uint(boardID), 1, 0, "", "")
+	postCount := h.postService.CountPostsInBoard(uint(boardID))
 
 	c.JSON(http.StatusOK, responses.SuccessResponse(
-		responses.NewBoardResponse(board, user.(*models.User), len(posts)),
+		responses.NewBoardResponse(board, user.(*models.User), postCount),
 	))
 }
 
@@ -287,10 +287,10 @@ func (h *BoardHandler) ToggleBoardLock(c *gin.Context) {
 	user, _ := c.Get("user")
 
 	// Count posts
-	posts, _ := h.postService.GetPostsForBoard(uint(boardID), 1, 0, "", "")
+	postCount := h.postService.CountPostsInBoard(uint(boardID))
 
 	c.JSON(http.StatusOK, responses.SuccessResponse(
-		responses.NewBoardResponse(board, user.(*models.User), len(posts)),
+		responses.NewBoardResponse(board, user.(*models.User), postCount),
 	))
 }
 
