@@ -9,6 +9,8 @@ services:
       CLIENT_URL: '*'
       DATABASE_URL: 'postgresql://admin:secret@postgres:5432/kudoboard?sslmode=disable'
       JWT_SECRET: 'your-super-secret-key-change-this-in-production'
+      GIPHY_API_KEY: 'my-giphy-api-key'
+      UNSPLASH_ACCESS_KEY: 'my-unspash-access-key'
     ports:
       - '8081:8080'
     depends_on:
