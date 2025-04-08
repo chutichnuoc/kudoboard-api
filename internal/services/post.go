@@ -500,7 +500,7 @@ func (s *PostService) GetPostsForBoard(boardID uint, page, perPage int, sortBy, 
 
 	// Add ordering
 	if sortBy == "" {
-		sortBy = "position_order"
+		sortBy = "position"
 	}
 	if order == "" {
 		order = "asc"
