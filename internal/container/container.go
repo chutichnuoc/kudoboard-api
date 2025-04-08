@@ -9,9 +9,10 @@ import (
 
 // Container holds all application services and dependencies
 type Container struct {
-	Config         *config.Config
-	DB             *gorm.DB
-	StorageService storage.StorageService
+	Config                *config.Config
+	DB                    *gorm.DB
+	StorageService        storage.StorageService
+	StorageCleanupService *storage.StorageCleanupService
 
 	// Services
 	AuthService     *services.AuthService
@@ -36,6 +37,7 @@ func NewContainer(cfg *config.Config, db *gorm.DB) (*Container, error) {
 		return nil, err
 	}
 	container.StorageService = storageService
+	container.StorageCleanupService = storage.NewStorageCleanupService(db, storageService, cfg)
 
 	// Initialize services in the correct order (respect dependencies)
 	container.AuthService = services.NewAuthService(db, storageService, cfg)

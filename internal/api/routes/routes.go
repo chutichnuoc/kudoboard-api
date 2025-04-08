@@ -30,7 +30,7 @@ func Setup(
 	boardHandler := handlers.NewBoardHandler(container.BoardService, container.PostService, container.ThemeService, container.AuthService, cfg)
 	postHandler := handlers.NewPostHandler(container.PostService, container.BoardService, container.AuthService, cfg)
 	themeHandler := handlers.NewThemeHandler(container.ThemeService, cfg)
-	fileHandler := handlers.NewFileHandler(container.FileService, cfg)
+	fileHandler := handlers.NewFileHandler(container.FileService, container.StorageCleanupService, cfg)
 	giphyHandler := handlers.NewGiphyHandler(container.GiphyService, cfg)
 	unsplashHandler := handlers.NewUnsplashHandler(container.UnsplashService, cfg)
 	healthHandler := handlers.NewHealthHandler(container.DB, cfg)
@@ -150,6 +150,12 @@ func Setup(
 		filesAuth.Use(authMiddleware.RequireAuth())
 		{
 			filesAuth.DELETE("", fileHandler.DeleteFile)
+		}
+		// Protected theme routes (only for admins)
+		filesAdmin := files.Group("")
+		filesAdmin.Use(authMiddleware.RequireAuth(), middleware.AdminOnly())
+		{
+			filesAdmin.POST("/cleanup-orphaned", fileHandler.CleanOrphanedFiles)
 		}
 	}
 

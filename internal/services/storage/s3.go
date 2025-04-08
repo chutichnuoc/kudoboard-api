@@ -55,6 +55,16 @@ func NewS3Storage(region, bucket, accessKey, secretKey string, cfg *config.Confi
 	}, nil
 }
 
+// GetS3Client returns the underlying S3 client
+func (s *S3Storage) GetS3Client() *s3.S3 {
+	return s.s3Client
+}
+
+// GetBucketName returns the S3 bucket name
+func (s *S3Storage) GetBucketName() string {
+	return s.bucket
+}
+
 // Save saves a file from a multipart form to S3
 func (s *S3Storage) Save(file *multipart.FileHeader, directory string) (*FileInfo, error) {
 	src, err := file.Open()
@@ -136,7 +146,7 @@ func (s *S3Storage) SaveFromReader(reader io.Reader, filename, contentType, dire
 // Get retrieves a file from S3
 func (s *S3Storage) Get(fileURL string) (io.ReadCloser, error) {
 	// Extract key from URL
-	key, err := extractPathFromURL(fileURL)
+	key, err := ExtractPathFromURL(fileURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse file URL: %w", err)
 	}
@@ -157,7 +167,7 @@ func (s *S3Storage) Get(fileURL string) (io.ReadCloser, error) {
 // Delete removes a file from S3
 func (s *S3Storage) Delete(fileURL string) error {
 	// Extract key from URL
-	key, err := extractPathFromURL(fileURL)
+	key, err := ExtractPathFromURL(fileURL)
 	if err != nil {
 		return fmt.Errorf("failed to parse file URL: %w", err)
 	}

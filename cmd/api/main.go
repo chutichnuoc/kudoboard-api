@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-co-op/gocron"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
@@ -50,6 +51,14 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to initialize service container", zap.Error(err))
 	}
+
+	scheduler := gocron.NewScheduler(time.UTC)
+	_, _ = scheduler.Every(1).Day().At("02:00").Do(func() {
+		if err := serviceContainer.StorageCleanupService.CleanOrphanedFiles(); err != nil {
+			log.Error("Storage cleanup job failed", zap.Error(err))
+		}
+	})
+	scheduler.StartAsync()
 
 	// Create Gin router
 	router := gin.New()
@@ -105,6 +114,9 @@ func main() {
 			log.Info("Database connections closed successfully")
 		}
 	}
+
+	log.Info("Shutting down scheduler...")
+	scheduler.Stop()
 
 	// Flush any buffered log entries
 	log.Shutdown()

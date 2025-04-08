@@ -2,25 +2,30 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	"kudoboard-api/internal/config"
 	"kudoboard-api/internal/dto/requests"
 	"kudoboard-api/internal/dto/responses"
+	"kudoboard-api/internal/log"
 	"kudoboard-api/internal/services"
+	"kudoboard-api/internal/services/storage"
 	"kudoboard-api/internal/utils"
 	"net/http"
 )
 
 // FileHandler handles file-related requests
 type FileHandler struct {
-	fileService *services.FileService
-	cfg         *config.Config
+	fileService           *services.FileService
+	storageCleanupService *storage.StorageCleanupService
+	cfg                   *config.Config
 }
 
 // NewFileHandler creates a new FileHandler
-func NewFileHandler(fileService *services.FileService, cfg *config.Config) *FileHandler {
+func NewFileHandler(fileService *services.FileService, storageCleanupService *storage.StorageCleanupService, cfg *config.Config) *FileHandler {
 	return &FileHandler{
-		fileService: fileService,
-		cfg:         cfg,
+		fileService:           fileService,
+		storageCleanupService: storageCleanupService,
+		cfg:                   cfg,
 	}
 }
 
@@ -82,4 +87,18 @@ func (h *FileHandler) DeleteFile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, responses.SuccessResponse(gin.H{"message": "File deleted successfully"}))
+}
+
+// CleanOrphanedFiles triggers a manual cleanup of orphaned files
+func (h *FileHandler) CleanOrphanedFiles(c *gin.Context) {
+	go func() {
+		if err := h.storageCleanupService.CleanOrphanedFiles(); err != nil {
+			log.Error("Cleanup job failed", zap.Error(err))
+
+		}
+	}()
+
+	c.JSON(http.StatusOK, responses.SuccessResponse(gin.H{
+		"message": "Orphaned file cleanup job started successfully",
+	}))
 }

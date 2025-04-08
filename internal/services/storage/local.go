@@ -111,7 +111,7 @@ func (s *LocalStorage) SaveFromReader(reader io.Reader, filename, contentType, d
 // Get retrieves a file from local storage
 func (s *LocalStorage) Get(fileURL string) (io.ReadCloser, error) {
 	// Extract file path from URL
-	relativePath, err := extractPathFromURL(fileURL)
+	relativePath, err := ExtractPathFromURL(fileURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse file URL: %w", err)
 	}
@@ -134,7 +134,7 @@ func (s *LocalStorage) Get(fileURL string) (io.ReadCloser, error) {
 // Delete removes a file from local storage
 func (s *LocalStorage) Delete(fileURL string) error {
 	// Extract file path from URL
-	relativePath, err := extractPathFromURL(fileURL)
+	relativePath, err := ExtractPathFromURL(fileURL)
 	if err != nil {
 		return fmt.Errorf("failed to parse file URL: %w", err)
 	}

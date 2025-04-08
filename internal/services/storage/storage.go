@@ -26,6 +26,7 @@ type FileInfo struct {
 	Size        int64
 	ContentType string
 	URL         string
+	ModTime     time.Time
 }
 
 // StorageService defines the interface for file storage operations
@@ -59,18 +60,8 @@ func NewStorageService(cfg *config.Config) (StorageService, error) {
 	}
 }
 
-// Helper function to generate a unique filename
-func generateUniqueFilename(originalFilename string) string {
-	ext := filepath.Ext(originalFilename)
-	name := strings.TrimSuffix(originalFilename, ext)
-	timestamp := time.Now().Format("20060102150405")
-	uniqueID := uuid.New().String()[0:8]
-
-	return fmt.Sprintf("%s-%s-%s%s", name, timestamp, uniqueID, ext)
-}
-
-// Helper function to extract file path from URL
-func extractPathFromURL(fileURL string) (string, error) {
+// ExtractPathFromURL extracts the storage path from a URL
+func ExtractPathFromURL(fileURL string) (string, error) {
 	// If it looks like a URL, parse it
 	if strings.HasPrefix(fileURL, "http://") || strings.HasPrefix(fileURL, "https://") {
 		parsedURL, err := url.Parse(fileURL)
@@ -88,4 +79,14 @@ func extractPathFromURL(fileURL string) (string, error) {
 
 	// If it's already a relative path, just return it
 	return fileURL, nil
+}
+
+// Helper function to generate a unique filename
+func generateUniqueFilename(originalFilename string) string {
+	ext := filepath.Ext(originalFilename)
+	name := strings.TrimSuffix(originalFilename, ext)
+	timestamp := time.Now().Format("20060102150405")
+	uniqueID := uuid.New().String()[0:8]
+
+	return fmt.Sprintf("%s-%s-%s%s", name, timestamp, uniqueID, ext)
 }
